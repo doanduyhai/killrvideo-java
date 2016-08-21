@@ -1,0 +1,24 @@
+
+TRUNCATE killrvideo.videos;
+TRUNCATE killrvideo.sample_data_youtube_videos;
+TRUNCATE killrvideo.video_recommendations;
+TRUNCATE killrvideo.sample_data_videos;
+TRUNCATE killrvideo.user_videos;
+TRUNCATE killrvideo.video_ratings_by_user;
+TRUNCATE killrvideo.comments_by_user;
+TRUNCATE killrvideo.video_recommendations_by_video;
+TRUNCATE killrvideo.uploaded_video_jobs;
+TRUNCATE killrvideo.tags_by_letter;
+TRUNCATE killrvideo.videos_by_tag;
+TRUNCATE killrvideo.video_ratings;
+TRUNCATE killrvideo.users;
+TRUNCATE killrvideo.encoding_job_notifications;
+TRUNCATE killrvideo.latest_videos;
+TRUNCATE killrvideo.uploaded_video_jobs_by_jobid;
+TRUNCATE killrvideo.sample_data_leases;
+TRUNCATE killrvideo.sample_data_users;
+TRUNCATE killrvideo.video_playback_stats;
+TRUNCATE killrvideo.comments_by_video;
+TRUNCATE killrvideo.user_credentials;
+TRUNCATE killrvideo.sample_data_job_log;
+TRUNCATE killrvideo.uploaded_video_destinations;

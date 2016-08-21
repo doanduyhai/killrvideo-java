@@ -1,6 +1,7 @@
 package killrvideo.entity;
 
 import java.util.Date;
+import java.util.Optional;
 import java.util.UUID;
 
 import info.archinnov.achilles.annotations.ClusteringColumn;
@@ -48,7 +49,9 @@ public class UserVideos extends AbstractVideoList {
         return VideoPreview.newBuilder()
                 .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
                 .setName(name)
-                .setPreviewImageLocation(previewImageLocation)
+                .setPreviewImageLocation(Optional
+                        .ofNullable(previewImageLocation)
+                        .orElse("N/A"))
                 .setUserId(TypeConverter.uuidToUuid(userid))
                 .setVideoId(TypeConverter.uuidToUuid(videoid))
                 .build();

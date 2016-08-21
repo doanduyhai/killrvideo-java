@@ -1,20 +1,34 @@
 package killrvideo.service;
 
-
 import static info.archinnov.achilles.internals.futures.FutureUtils.toCompletableFuture;
 import static java.util.stream.Collectors.toList;
+import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 import java.text.SimpleDateFormat;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
 import com.datastax.driver.core.*;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.EventBus;
 
@@ -22,22 +36,29 @@ import info.archinnov.achilles.generated.manager.LatestVideos_Manager;
 import info.archinnov.achilles.generated.manager.UserVideos_Manager;
 import info.archinnov.achilles.generated.manager.Video_Manager;
 import info.archinnov.achilles.type.tuples.Tuple2;
+import info.archinnov.achilles.type.tuples.Tuple3;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import killrvideo.common.CommonTypes.Uuid;
 import killrvideo.entity.LatestVideos;
 import killrvideo.entity.UserVideos;
 import killrvideo.entity.Video;
+import killrvideo.events.CassandraMutationError;
 import killrvideo.utils.TypeConverter;
+import killrvideo.validation.KillrVideoInputValidator;
 import killrvideo.video_catalog.VideoCatalogServiceGrpc.AbstractVideoCatalogService;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.*;
 import killrvideo.video_catalog.events.VideoCatalogEvents.UploadedVideoAccepted;
 import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
 
+@Service
 public class VideoCatalogService extends AbstractVideoCatalogService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(VideoCatalogService.class);
 
     public static final int MAX_DAYS_IN_PAST_FOR_LATEST_VIDEOS = 7;
     public static final int LATEST_VIDEOS_TTL_SECONDS = MAX_DAYS_IN_PAST_FOR_LATEST_VIDEOS * 24 * 3600;
-    public static final Pattern PARSE_LATEST_PAGING_STATE = Pattern.compile("([0-9]{8}){8}([0-9]{1})(.*)");
+    public static final Pattern PARSE_LATEST_PAGING_STATE = Pattern.compile("((?:[0-9]{8}_){7}[0-9]{8}),([0-9]),(.*)");
 
     @Inject
     Video_Manager videoManager;
@@ -54,7 +75,10 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Inject
     ExecutorService executorService;
 
-    private Session session;
+    @Inject
+    KillrVideoInputValidator validator;
+
+    Session session;
 
     @PostConstruct
     public void init(){
@@ -64,6 +88,12 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Override
     public void submitUploadedVideo(SubmitUploadedVideoRequest request, StreamObserver<SubmitUploadedVideoResponse> responseObserver) {
 
+        LOGGER.debug("Start submitting uploaded video");
+
+        if (!validator.isValid(request, responseObserver)) {
+            return;
+        }
+
         final Date now = new Date();
 
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
@@ -72,7 +102,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final BoundStatement bs1 = videoManager
                 .crud()
                 .insert(new Video(videoId, userId, request.getName(), request.getDescription(),
-                        VideoLocationType.UPLOAD.name(), Sets.newHashSet(request.getTagsList().iterator()), now))
+                        VideoLocationType.UPLOAD.ordinal(), Sets.newHashSet(request.getTagsList().iterator()), now))
                 .generateAndGetBoundStatement();
 
         final BoundStatement bs2 = userVideosManager
@@ -80,6 +110,9 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 .insert(new UserVideos(userId, videoId, request.getName(), now))
                 .generateAndGetBoundStatement();
 
+        /**
+         * Logged batch insert for automatic retry
+         */
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
         batchStatement.add(bs1);
         batchStatement.add(bs2);
@@ -88,6 +121,11 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         toCompletableFuture(session.executeAsync(batchStatement), executorService)
                 .handle((rs,ex) -> {
                     if (rs != null) {
+
+                        /**
+                         * Right now there is no defined event handler for
+                         * UploadedVideoAccepted event. To be implemented
+                         */
                         eventBus.post(UploadedVideoAccepted
                                 .newBuilder()
                                 .setVideoId(request.getVideoId())
@@ -97,16 +135,27 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         responseObserver.onNext(SubmitUploadedVideoResponse.newBuilder().build());
                         responseObserver.onCompleted();
 
+                        LOGGER.debug("End submitting uploaded video");
+
                     } else if (ex != null) {
+
+                        LOGGER.error("Exception submitting uploaded video : " + mergeStackTrace(ex));
+
+                        eventBus.post(new CassandraMutationError(request, ex));
                         responseObserver.onError(ex);
                     }
                     return rs;
                 });
-
     }
 
     @Override
     public void submitYouTubeVideo(SubmitYouTubeVideoRequest request, StreamObserver<SubmitYouTubeVideoResponse> responseObserver) {
+
+        LOGGER.debug("Start submitting youtube video");
+
+        if (!validator.isValid(request, responseObserver)) {
+            return;
+        }
 
         final Date now = new Date();
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
@@ -118,7 +167,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         final BoundStatement bs1 = videoManager
                 .crud()
-                .insert(new Video(videoId, userId, request.getName(), request.getDescription(), location, VideoLocationType.YOUTUBE.name(), previewImageLocation, Sets.newHashSet(request.getTagsList().iterator()), now))
+                .insert(new Video(videoId, userId, request.getName(), request.getDescription(), location,
+                        VideoLocationType.YOUTUBE.ordinal(), previewImageLocation, Sets.newHashSet(request.getTagsList().iterator()), now))
                 .generateAndGetBoundStatement();
 
         final BoundStatement bs2 = userVideosManager
@@ -132,6 +182,9 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 .usingTimeToLive(LATEST_VIDEOS_TTL_SECONDS)
                 .generateAndGetBoundStatement();
 
+        /**
+         * Logged batch insert for automatic retry
+         */
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
         batchStatement.add(bs1);
         batchStatement.add(bs2);
@@ -141,7 +194,10 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         toCompletableFuture(session.executeAsync(batchStatement), executorService)
                 .handle((rs, ex) -> {
                     if (rs != null) {
-                        final YouTubeVideoAdded youTubeVideoAdded = YouTubeVideoAdded.newBuilder()
+                        /**
+                         * See class {@link VideoAddedHandlers} for the impl
+                         */
+                        final YouTubeVideoAdded.Builder youTubeVideoAdded = YouTubeVideoAdded.newBuilder()
                                 .setAddedDate(TypeConverter.dateToTimestamp(now))
                                 .setDescription(request.getDescription())
                                 .setLocation(location)
@@ -149,15 +205,22 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                                 .setPreviewImageLocation(previewImageLocation)
                                 .setTimestamp(TypeConverter.dateToTimestamp(now))
                                 .setUserId(request.getUserId())
-                                .setVideoId(request.getVideoId())
-                                .build();
-                        youTubeVideoAdded.getTagsList().addAll(Sets.newHashSet(request.getTagsList()));
-                        eventBus.post(youTubeVideoAdded);
+                                .setVideoId(request.getVideoId());
+                        youTubeVideoAdded.addAllTags(Sets.newHashSet(request.getTagsList()));
+                        eventBus.post(youTubeVideoAdded.build());
+
                         responseObserver.onNext(SubmitYouTubeVideoResponse.newBuilder().build());
                         responseObserver.onCompleted();
 
+                        LOGGER.debug("End submitting youtube video");
+
                     } else if (ex != null) {
+
+                        LOGGER.error("Exception submitting youtube video : " + mergeStackTrace(ex));
+
+                        eventBus.post(new CassandraMutationError(request, ex));
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
                     }
                     return rs;
                 });
@@ -165,6 +228,12 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
     @Override
     public void getVideo(GetVideoRequest request, StreamObserver<GetVideoResponse> responseObserver) {
+
+        LOGGER.debug("Start getting video");
+
+        if (!validator.isValid(request, responseObserver)) {
+            return;
+        }
 
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
 
@@ -176,10 +245,19 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     if (entity != null) {
                         responseObserver.onNext(entity.toVideoResponse());
                         responseObserver.onCompleted();
+
+                        LOGGER.debug("End getting video");
+
                     } else if (entity == null) {
+
+                        LOGGER.warn("Video with id " + videoId + " was not found");
+
                         responseObserver.onError(Status.NOT_FOUND
                                 .withDescription("Video with id " + videoId + " was not found").asRuntimeException());
                     } else if (ex != null) {
+
+                        LOGGER.error("Exception getting video : " + mergeStackTrace(ex));
+
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
                     }
                     return entity;
@@ -188,18 +266,27 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
     @Override
     public void getVideoPreviews(GetVideoPreviewsRequest request, StreamObserver<GetVideoPreviewsResponse> responseObserver) {
+
+        LOGGER.debug("Start getting video preview");
+
+        if (!validator.isValid(request, responseObserver)) {
+            return;
+        }
+
         final GetVideoPreviewsResponse.Builder builder = GetVideoPreviewsResponse.newBuilder();
 
         if (request.getVideoIdsCount() == 0 || request.getVideoIdsList() == null) {
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
+
+            LOGGER.warn("No video id provided for video preview");
+
             return;
         }
 
-        if (request.getVideoIdsCount() > 20) {
-            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Cannot fetch more than 20 videos at once").asRuntimeException());
-        }
-
+        /**
+         * Fire a list of async SELECT, one for each video id
+         */
         final List<CompletableFuture<Video>> listFuture = request
                 .getVideoIdsList()
                 .stream()
@@ -207,43 +294,226 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 .map(uuid -> videoManager.crud().findById(uuid).getAsync())
                 .collect(toList());
 
+        /**
+         * Merge all the async SELECT results
+         */
         CompletableFuture
                 .allOf(listFuture.toArray(new CompletableFuture[listFuture.size()]))
                 .thenApply(v -> listFuture.stream().map(CompletableFuture::join).collect(toList()))
-                .thenAccept(list -> list
-                        .stream()
-                        .map(entity -> builder.addVideoPreviews(entity.toVideoPreview()))
-                        .collect(toList()));
-        responseObserver.onNext(builder.build());
-        responseObserver.onCompleted();
+                .handle((list,ex) -> {
+                    if (list != null) {
+                        list.stream()
+                                .filter(x -> x != null)
+                                .forEach(entity -> builder.addVideoPreviews(entity.toVideoPreview()));
+
+                        responseObserver.onNext(builder.build());
+                        responseObserver.onCompleted();
+
+                        LOGGER.debug("End getting video preview");
+
+                    } else if (ex != null) {
+
+                        LOGGER.error("Exception getting video preview : " + mergeStackTrace(ex));
+
+                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
+                    }
+                    return list;
+                });
     }
 
+    /**
+     * In this method, we craft our own paging state. The custom paging state format is:
+     * <br/>
+     * <br/>
+     * <code>
+     * yyyyMMdd_yyyyMMdd_yyyyMMdd_yyyyMMdd_yyyyMMdd_yyyyMMdd_yyyyMMdd_yyyyMMdd,&lt;index&gt;,&lt;Cassandra paging state as string&gt;
+     * </code>
+     * <br/>
+     * <br/>
+     * <ul>
+     *     <li>The first field is the date of 7 days in the past, starting from <strong>now</strong></li>
+     *     <li>The second field is the index in this date list, to know at which day in the past we stop at the previous query</li>
+     *     <li>The last field is the serialized form of the native Cassandra paging state</li>
+     * </ul>
+     *
+     * On the first query, we create our own custom paging state in the server by computing the list of 8 days
+     * in the past, the <strong>index</strong> is set to 0 and there is no native Cassandra paging state
+     *
+     * <br/>
+     * <br/>
+     *
+     * On subsequent request, we decode the custom paging state coming from the web app and resume querying from
+     * the appropriate date and we inject also the native Cassandra paging state.
+     *
+     * <br/>
+     * <br/>
+     *
+     * <strong>However, we can only use the native Cassandra paging state for the 1st query in the for loop. Indeed
+     * Cassandra paging state is a hash of query string and bound values. We may switch partition to move one day
+     * back in the past to fetch more results so the paging state will no longer be usable</strong>
+     *
+     *
+     */
     @Override
     public void getLatestVideoPreviews(GetLatestVideoPreviewsRequest request, StreamObserver<GetLatestVideoPreviewsResponse> responseObserver) {
-        String[] buckets;
-        int bucketIndex;
-        String rowPagingState;
 
-        //???
+        LOGGER.debug("Start getting latest video preview");
+
+        if (!validator.isValid(request, responseObserver)) {
+            return;
+        }
+
+        final Tuple3<List<String>, Integer, String> tuple3 = parseCustomPagingState(Optional.ofNullable(request.getPagingState()))
+                .orElseGet(this.buildFirstCustomPagingState());
+
+        List<String> buckets = tuple3._1();
+        int bucketIndex = tuple3._2();
+        String rowPagingState = tuple3._3();
+
+
+        final Optional<Date> startingAddedDate = Optional
+                .ofNullable(request.getStartingAddedDate())
+                .filter(x -> StringUtils.isNotBlank(x.toString()))
+                .map(x -> Instant.ofEpochSecond(x.getSeconds(), x.getNanos()))
+                .map(Date::from);
+
+        final Optional<UUID> startingVideoId = Optional
+                .ofNullable(request.getStartingVideoId())
+                .filter(x -> StringUtils.isNotBlank(x.toString()))
+                .map(x -> x.getValue())
+                .filter(StringUtils::isNotBlank)
+                .map(UUID::fromString);
+
+        final List<VideoPreview> results = new ArrayList<>();
+        String nextPageState = "";
+
+        /**
+         * Boolean to know if the native Cassandra paging
+         * state has been used
+         */
+        final AtomicBoolean cassandraPagingStateUsed = new AtomicBoolean(false);
+
+        try {
+
+            while (bucketIndex < buckets.size()) {
+
+                int recordsStillNeeded = request.getPageSize() - results.size();
+                final String yyyyMMdd = buckets.get(bucketIndex);
+                final Tuple2<List<LatestVideos>, ExecutionInfo> resultWithPagingState;
+
+                final Optional<String> pagingStateString =
+                        Optional.ofNullable(rowPagingState)
+                                .filter(StringUtils::isNotBlank)
+                                .filter(pg -> !cassandraPagingStateUsed.get());
+
+                /**
+                 * If startingAddedDate and startingVideoId are provided,
+                 * we do NOT use the paging state
+                 */
+                if (startingAddedDate.isPresent() && startingVideoId.isPresent()) {
+                    resultWithPagingState = latestVideosManager
+                            .dsl()
+                            .select()
+                            .allColumns_FromBaseTable()
+                            .where()
+                            .yyyymmdd_Eq(yyyyMMdd)
+                            .addedDate_And_videoid_Lte(startingAddedDate.get(), startingVideoId.get())
+                            .withFetchSize(recordsStillNeeded)
+                            .getListWithStats();
+                } else {
+
+                    resultWithPagingState = latestVideosManager
+                            .dsl()
+                            .select()
+                            .allColumns_FromBaseTable()
+                            .where()
+                            .yyyymmdd_Eq(yyyyMMdd)
+                            .withFetchSize(recordsStillNeeded)
+                            .withOptionalPagingStateString(pagingStateString)
+                            .getListWithStats();
+                    cassandraPagingStateUsed.compareAndSet(false, true);
+                }
+
+                results.addAll(resultWithPagingState
+                        ._1()
+                        .stream()
+                        .map(LatestVideos::toVideoPreview)
+                        .collect(toList()));
+
+                final ExecutionInfo executionInfo = resultWithPagingState._2();
+
+                // See if we can stop querying
+                if (results.size() >= request.getPageSize()) {
+
+                    // Are there more rows in the current bucket?
+                    if (executionInfo.getPagingState() != null) {
+                        // Start from where we left off in this bucket if we get the next page
+                        nextPageState = createPagingState(buckets, bucketIndex, executionInfo.getPagingState().toString());
+                    } else if (bucketIndex != buckets.size() - 1) {
+                        // Start from the beginning of the next bucket since we're out of rows in this one
+                        nextPageState = createPagingState(buckets, bucketIndex + 1, "");
+                    }
+                    break;
+                }
+
+                bucketIndex++;
+            }
+            responseObserver.onNext(GetLatestVideoPreviewsResponse
+                    .newBuilder()
+                    .addAllVideoPreviews(results)
+                    .setPagingState(nextPageState).build());
+            responseObserver.onCompleted();
+
+        } catch (Throwable throwable) {
+
+            LOGGER.error("Exception when getting latest preview videos : " + mergeStackTrace(throwable));
+
+            responseObserver.onError(Status.INTERNAL.withCause(throwable).asRuntimeException());
+        }
+
+
+        LOGGER.debug("End getting latest video preview");
     }
+
 
     @Override
     public void getUserVideoPreviews(GetUserVideoPreviewsRequest request, StreamObserver<GetUserVideoPreviewsResponse> responseObserver) {
 
+        LOGGER.debug("Start getting user video preview");
+
+        if (!validator.isValid(request, responseObserver)) {
+            return;
+        }
+
         final UUID userId = UUID.fromString(request.getUserId().getValue());
-        final Optional<UUID> startingVideoId = Optional.ofNullable(request.getStartingVideoId()).map(uuid -> UUID.fromString(uuid.getValue()));
-        final Instant startingAddedDate = Instant.ofEpochSecond(request.getStartingAddedDate().getSeconds(), request.getStartingAddedDate().getNanos());
+        final Optional<UUID> startingVideoId = Optional
+                .ofNullable(request.getStartingVideoId())
+                .map(Uuid::getValue)
+                .filter(StringUtils::isNotBlank)
+                .map(UUID::fromString);
+
+        final Optional<Date> startingAddedDate = Optional
+                .ofNullable(request.getStartingAddedDate())
+                .map(ts -> Instant.ofEpochSecond(ts.getSeconds(), ts.getNanos()))
+                .map(Date::from);
 
         final CompletableFuture<Tuple2<List<UserVideos>, ExecutionInfo>> listAsync;
-        if (startingVideoId.isPresent()) {
+        final Optional<String> pagingStateString = Optional.ofNullable(request.getPagingState()).filter(StringUtils::isNotBlank);
+
+        /**
+         * If startingAddedDate and startingVideoId are provided,
+         * we do NOT use the paging state
+         */
+        if (startingVideoId.isPresent() && startingAddedDate.isPresent()) {
             listAsync = userVideosManager
                     .dsl()
                     .select()
                     .allColumns_FromBaseTable()
                     .where()
                     .userid_Eq(userId)
-                    .limit(request.getPageSize())
-                    .withOptionalPagingState(request.getPagingState())
+                    .addedDate_And_videoid_Lte(startingAddedDate.get(), startingVideoId.get())
+                    .withFetchSize(request.getPageSize())
                     .getListAsyncWithStats();
 
         } else {
@@ -253,9 +523,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     .allColumns_FromBaseTable()
                     .where()
                     .userid_Eq(userId)
-                    .addedDate_And_videoid_Lte(Date.from(startingAddedDate), startingVideoId.get())
-                    .limit(request.getPageSize())
-                    .withOptionalPagingState(request.getPagingState())
+                    .withFetchSize(request.getPageSize())
+                    .withOptionalPagingStateString(pagingStateString)
                     .getListAsyncWithStats();
         }
 
@@ -270,12 +539,50 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                                 .ifPresent(builder::setPagingState);
                         responseObserver.onNext(builder.build());
                         responseObserver.onCompleted();
-                    } else if (ex != null) {
-                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-                    }
 
+                        LOGGER.debug("End getting user video preview");
+
+                    } else if (ex != null) {
+
+                        LOGGER.error("Exception getting user video preview : " + mergeStackTrace(ex));
+
+                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
+                    }
                     return tuple2;
                 });
     }
-    
+
+    private String createPagingState(List<String> buckets, int bucketIndex, String rowsPagingState) {
+        StringJoiner joiner = new StringJoiner("_");
+        buckets.forEach(joiner::add);
+        return joiner.toString() + "," + bucketIndex + "," + rowsPagingState;
+    }
+
+    private Optional<Tuple3<List<String>, Integer, String>> parseCustomPagingState(Optional<String> customPagingState) {
+        return customPagingState
+                .map(pagingState -> {
+                    Matcher matcher = PARSE_LATEST_PAGING_STATE.matcher(pagingState);
+                    if (matcher.matches()) {
+                        final List<String> buckets = Lists.newArrayList(matcher.group(1).split("_"));
+                        final int currentBucket = Integer.parseInt(matcher.group(2));
+                        final String cassandraPagingState = matcher.group(3);
+                        return Tuple3.of(buckets, currentBucket, cassandraPagingState);
+                    } else {
+                        return null;
+                    }
+                });
+    }
+
+    private Supplier<Tuple3<List<String>, Integer, String>> buildFirstCustomPagingState() {
+        return () -> {
+            final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+            final ZonedDateTime now = Instant.now().atZone(ZoneId.systemDefault());
+            final List<String> buckets = LongStream.rangeClosed(0L, 7L).boxed()
+                    .map(now::minusDays)
+                    .map(x -> x.format(formatter))
+                    .collect(Collectors.toList());
+            return Tuple3.of(buckets, 0, null);
+        };
+    }
 }

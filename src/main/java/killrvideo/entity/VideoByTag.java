@@ -1,13 +1,17 @@
 package killrvideo.entity;
 
 import static killrvideo.entity.Schema.KEYSPACE;
+import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
 import java.util.Date;
 import java.util.UUID;
 
+
+import javax.validation.constraints.NotNull;
+
 import info.archinnov.achilles.annotations.*;
-import killrvideo.search.SearchServiceOuterClass;
 import killrvideo.search.SearchServiceOuterClass.SearchResultsVideoPreview;
+import killrvideo.suggested_videos.SuggestedVideosService.SuggestedVideoPreview;
 import killrvideo.utils.TypeConverter;
 
 @Table(keyspace = KEYSPACE, table = "videos_by_tag")
@@ -19,20 +23,25 @@ public class VideoByTag extends AbstractVideo{
     @ClusteringColumn
     private UUID videoid;
 
+    @NotNull
     @Column("added_date")
     private Date addedDate;
 
+    @NotNull
     @Column
     private UUID userid;
 
+    @NotNull
     @Column("tagged_date")
     private Date taggedDate;
 
     public VideoByTag() {
     }
 
-    public VideoByTag(String tag, UUID videoid, UUID userid, Date taggedDate, Date addedDate) {
+    public VideoByTag(String tag, UUID videoid, UUID userid, String name, String previewImageLocation, Date taggedDate, Date addedDate) {
         this.tag = tag;
+        this.name = name;
+        this.previewImageLocation = previewImageLocation;
         this.videoid = videoid;
         this.userid = userid;
         this.addedDate = addedDate;
@@ -87,6 +96,17 @@ public class VideoByTag extends AbstractVideo{
                 .setPreviewImageLocation(previewImageLocation)
                 .setUserId(TypeConverter.uuidToUuid(userid))
                 .setVideoId(TypeConverter.uuidToUuid(videoid))
+                .build();
+    }
+
+    public SuggestedVideoPreview toSuggestedVideoPreview() {
+        return SuggestedVideoPreview
+                .newBuilder()
+                .setVideoId(TypeConverter.uuidToUuid(videoid))
+                .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
+                .setName(name)
+                .setPreviewImageLocation(previewImageLocation)
+                .setUserId(TypeConverter.uuidToUuid(userid))
                 .build();
     }
 }

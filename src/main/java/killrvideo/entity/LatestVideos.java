@@ -1,11 +1,15 @@
 package killrvideo.entity;
 
 import java.util.Date;
+import java.util.Optional;
 import java.util.UUID;
 
 import info.archinnov.achilles.annotations.Column;
 import info.archinnov.achilles.annotations.PartitionKey;
 import info.archinnov.achilles.annotations.Table;
+import killrvideo.utils.TypeConverter;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 
 @Table(keyspace = Schema.KEYSPACE, table = "latest_videos")
 public class LatestVideos extends AbstractVideoList{
@@ -42,5 +46,16 @@ public class LatestVideos extends AbstractVideoList{
 
     public void setUserid(UUID userid) {
         this.userid = userid;
+    }
+
+    public VideoPreview toVideoPreview() {
+        return VideoPreview
+                .newBuilder()
+                .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
+                .setName(name)
+                .setPreviewImageLocation(Optional.ofNullable(previewImageLocation).orElse("N/A"))
+                .setUserId(TypeConverter.uuidToUuid(userid))
+                .setVideoId(TypeConverter.uuidToUuid(videoid))
+                .build();
     }
 }

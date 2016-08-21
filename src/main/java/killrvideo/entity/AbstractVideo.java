@@ -2,10 +2,13 @@ package killrvideo.entity;
 
 import java.util.UUID;
 
+import org.hibernate.validator.constraints.NotBlank;
+
 import info.archinnov.achilles.annotations.Column;
 
 public abstract class AbstractVideo {
 
+    @NotBlank
     @Column
     protected String name;
 

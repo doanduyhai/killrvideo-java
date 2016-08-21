@@ -6,10 +6,11 @@ import info.archinnov.achilles.annotations.Column;
 import info.archinnov.achilles.annotations.PartitionKey;
 import info.archinnov.achilles.annotations.Table;
 
-@Table(keyspace = KEYSPACE, table = "video_recommendations_by_video")
+@Table(keyspace = KEYSPACE, table = "uploaded_video_destinations")
 public class UploadedVideoDestinations {
 
     @PartitionKey
+    @Column("upload_url")
     private String uploadUrl;
 
     @Column

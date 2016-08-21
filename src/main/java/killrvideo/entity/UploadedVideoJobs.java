@@ -14,7 +14,7 @@ public class UploadedVideoJobs {
     @PartitionKey
     private UUID videoid;
 
-    @Column
+    @Column("upload_url")
     private String uploadUrl;
 
     @Column

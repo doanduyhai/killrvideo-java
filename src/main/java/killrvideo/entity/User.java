@@ -3,6 +3,10 @@ package killrvideo.entity;
 import java.util.Date;
 import java.util.UUID;
 
+import javax.validation.constraints.NotNull;
+
+import org.hibernate.validator.constraints.NotBlank;
+
 import info.archinnov.achilles.annotations.Column;
 import info.archinnov.achilles.annotations.PartitionKey;
 import info.archinnov.achilles.annotations.Table;
@@ -16,16 +20,20 @@ public class User {
     @PartitionKey
     private UUID userid;
 
+    @NotBlank
     @Column
     private String firstname;
 
+    @NotBlank
     @Column
     private String lastname;
 
+    @NotBlank
     @Column
     private String email;
 
-    @Column("created_at")
+    @NotNull
+    @Column("created_date")
     private Date createdAt;
 
     public User() {

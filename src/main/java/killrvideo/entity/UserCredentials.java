@@ -4,6 +4,10 @@ import static killrvideo.entity.Schema.KEYSPACE;
 
 import java.util.UUID;
 
+import javax.validation.constraints.NotNull;
+
+import org.hibernate.validator.constraints.NotBlank;
+
 import info.archinnov.achilles.annotations.Column;
 import info.archinnov.achilles.annotations.PartitionKey;
 import info.archinnov.achilles.annotations.Table;
@@ -14,9 +18,11 @@ public class UserCredentials {
     @PartitionKey
     private String email;
 
-    @Column
+    @NotBlank
+    @Column("pass")
     private String password;
 
+    @NotNull
     @Column
     private UUID userid;
 

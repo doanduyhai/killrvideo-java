@@ -1,14 +1,12 @@
 CREATE KEYSPACE IF NOT EXISTS killrvideo WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 
-// User credentials, keyed by email address so we can authenticate
 CREATE TABLE IF NOT EXISTS killrvideo.user_credentials (
     email text,
-    password text,
+    pass text,
     userid uuid,
     PRIMARY KEY (email)
 );
 
-// Users keyed by id
 CREATE TABLE IF NOT EXISTS killrvideo.users (
     userid uuid,
     firstname text,
@@ -18,7 +16,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.users (
     PRIMARY KEY (userid)
 );
 
-// Videos by id
 CREATE TABLE IF NOT EXISTS killrvideo.videos (
     videoid uuid,
     userid uuid,
@@ -32,7 +29,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.videos (
     PRIMARY KEY (videoid)
 );
 
-// One-to-many from user point of view (lookup table)
 CREATE TABLE IF NOT EXISTS killrvideo.user_videos (
     userid uuid,
     added_date timestamp,
@@ -42,8 +38,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.user_videos (
     PRIMARY KEY (userid, added_date, videoid)
 ) WITH CLUSTERING ORDER BY (added_date DESC, videoid ASC);
 
-// Track latest videos, grouped by day (if we ever develop a bad hotspot from the daily grouping here, we could mitigate by
-// splitting the row using an arbitrary group number, making the partition key (yyyymmdd, group_number))
 CREATE TABLE IF NOT EXISTS killrvideo.latest_videos (
     yyyymmdd text,
     added_date timestamp,
@@ -54,7 +48,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.latest_videos (
     PRIMARY KEY (yyyymmdd, added_date, videoid)
 ) WITH CLUSTERING ORDER BY (added_date DESC, videoid ASC);
 
-// Video ratings (counter table)
 CREATE TABLE IF NOT EXISTS killrvideo.video_ratings (
     videoid uuid,
     rating_counter counter,
@@ -62,7 +55,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.video_ratings (
     PRIMARY KEY (videoid)
 );
 
-// Video ratings by user (to try and mitigate voting multiple times)
 CREATE TABLE IF NOT EXISTS killrvideo.video_ratings_by_user (
     videoid uuid,
     userid uuid,
@@ -70,14 +62,12 @@ CREATE TABLE IF NOT EXISTS killrvideo.video_ratings_by_user (
     PRIMARY KEY (videoid, userid)
 );
 
-// Records the number of views/playbacks of a video
 CREATE TABLE IF NOT EXISTS killrvideo.video_playback_stats (
     videoid uuid,
     views counter,
     PRIMARY KEY (videoid)
 );
 
-// Recommendations by user (powered by Spark), with the newest videos added to the site always first
 CREATE TABLE IF NOT EXISTS killrvideo.video_recommendations (
     userid uuid,
     added_date timestamp,
@@ -89,7 +79,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.video_recommendations (
     PRIMARY KEY(userid, added_date, videoid)
 ) WITH CLUSTERING ORDER BY (added_date DESC, videoid ASC);
 
-// Recommendations by video (powered by Spark)
 CREATE TABLE IF NOT EXISTS killrvideo.video_recommendations_by_video (
     videoid uuid,
     userid uuid,
@@ -101,7 +90,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.video_recommendations_by_video (
     PRIMARY KEY(videoid, userid)
 );
 
-// Index for tag keywords
 CREATE TABLE IF NOT EXISTS killrvideo.videos_by_tag (
     tag text,
     videoid uuid,
@@ -113,14 +101,12 @@ CREATE TABLE IF NOT EXISTS killrvideo.videos_by_tag (
     PRIMARY KEY (tag, videoid)
 );
 
-// Index for tags by first letter in the tag
 CREATE TABLE IF NOT EXISTS killrvideo.tags_by_letter (
     first_letter text,
     tag text,
     PRIMARY KEY (first_letter, tag)
 );
 
-// Comments for a given video
 CREATE TABLE IF NOT EXISTS killrvideo.comments_by_video (
     videoid uuid,
     commentid timeuuid,
@@ -129,7 +115,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.comments_by_video (
     PRIMARY KEY (videoid, commentid)
 ) WITH CLUSTERING ORDER BY (commentid DESC);
 
-// Comments for a given user
 CREATE TABLE IF NOT EXISTS killrvideo.comments_by_user (
     userid uuid,
     commentid timeuuid,
@@ -138,7 +123,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.comments_by_user (
     PRIMARY KEY (userid, commentid)
 ) WITH CLUSTERING ORDER BY (commentid DESC);
 
-// Uploaded video assets that have been created in Azure Media Services
 CREATE TABLE IF NOT EXISTS killrvideo.uploaded_video_destinations (
     upload_url text,
     assetid text,
@@ -161,7 +145,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.uploaded_video_jobs_by_jobid (
     PRIMARY KEY (jobid)
 );
 
-// Log of notifications from Azure Media Services encoding jobs (latest updates first)
 CREATE TABLE IF NOT EXISTS killrvideo.encoding_job_notifications (
     videoid uuid,
     status_date timestamp,
@@ -172,7 +155,6 @@ CREATE TABLE IF NOT EXISTS killrvideo.encoding_job_notifications (
     PRIMARY KEY (videoid, status_date, etag)
 ) WITH CLUSTERING ORDER BY (status_date DESC, etag ASC);
 
-// Log of sample data jobs that have been run (keep logs for max of 14 days)
 CREATE TABLE IF NOT EXISTS killrvideo.sample_data_job_log (
     job_name text,
     scheduled_run_time timestamp,
@@ -181,26 +163,22 @@ CREATE TABLE IF NOT EXISTS killrvideo.sample_data_job_log (
 ) WITH CLUSTERING ORDER BY (scheduled_run_time DESC, actual_run_time DESC)
   AND default_time_to_live = 1209600;
 
-// Lease table for sample data worker (max lease time 180 seconds)
 CREATE TABLE IF NOT EXISTS killrvideo.sample_data_leases (
     name text,
     owner text,
     PRIMARY KEY (name)
 ) WITH default_time_to_live = 180;
 
-// Table to keep track of sample users added to the site
 CREATE TABLE IF NOT EXISTS killrvideo.sample_data_users (
     userid uuid,
     PRIMARY KEY(userid)
 );
 
-// Table to be able to retrieve random videos to add sample data to (comments, ratings, etc)
 CREATE TABLE IF NOT EXISTS killrvideo.sample_data_videos (
     videoid uuid,
     PRIMARY KEY (videoid)
 );
 
-// Table to keep track of sample YouTube videos that have been added
 CREATE TABLE IF NOT EXISTS killrvideo.sample_data_youtube_videos (
     sourceid text,
     published_at timestamp,

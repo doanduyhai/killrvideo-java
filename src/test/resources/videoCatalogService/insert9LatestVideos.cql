@@ -1,0 +1,9 @@
+INSERT INTO killrvideo.latest_videos(yyyymmdd, videoid, userid, added_date, name) VALUES('${yyyymmdd1}', ${videoid1}, 00000000-1111-0000-0000-000000000000, '${date1}', 'latest_video1.mp4');
+INSERT INTO killrvideo.latest_videos(yyyymmdd, videoid, userid, added_date, name) VALUES('${yyyymmdd2}', ${videoid2}, 00000000-1112-0000-0000-000000000000, '${date2}', 'latest_video2.mp4');
+INSERT INTO killrvideo.latest_videos(yyyymmdd, videoid, userid, added_date, name) VALUES('${yyyymmdd3}', ${videoid3}, 00000000-1113-0000-0000-000000000000, '${date3}', 'latest_video3.mp4');
+INSERT INTO killrvideo.latest_videos(yyyymmdd, videoid, userid, added_date, name) VALUES('${yyyymmdd4}', ${videoid4}, 00000000-1114-0000-0000-000000000000, '${date4}', 'latest_video4.mp4');
+INSERT INTO killrvideo.latest_videos(yyyymmdd, videoid, userid, added_date, name) VALUES('${yyyymmdd5}', ${videoid5}, 00000000-1115-0000-0000-000000000000, '${date5}', 'latest_video5.mp4');
+INSERT INTO killrvideo.latest_videos(yyyymmdd, videoid, userid, added_date, name) VALUES('${yyyymmdd6}', ${videoid6}, 00000000-1116-0000-0000-000000000000, '${date6}', 'latest_video6.mp4');
+INSERT INTO killrvideo.latest_videos(yyyymmdd, videoid, userid, added_date, name) VALUES('${yyyymmdd7}', ${videoid7}, 00000000-1117-0000-0000-000000000000, '${date7}', 'latest_video7.mp4');
+INSERT INTO killrvideo.latest_videos(yyyymmdd, videoid, userid, added_date, name) VALUES('${yyyymmdd8}', ${videoid8}, 00000000-1118-0000-0000-000000000000, '${date8}', 'latest_video8.mp4');
+INSERT INTO killrvideo.latest_videos(yyyymmdd, videoid, userid, added_date, name) VALUES('${yyyymmdd9}', ${videoid9}, 00000000-1119-0000-0000-000000000000, '${date9}', 'latest_video9.mp4');

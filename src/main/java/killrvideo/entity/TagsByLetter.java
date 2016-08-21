@@ -2,6 +2,8 @@ package killrvideo.entity;
 
 import static killrvideo.entity.Schema.KEYSPACE;
 
+import org.hibernate.validator.constraints.NotBlank;
+
 import info.archinnov.achilles.annotations.ClusteringColumn;
 import info.archinnov.achilles.annotations.Column;
 import info.archinnov.achilles.annotations.PartitionKey;
@@ -14,6 +16,7 @@ public class TagsByLetter {
     @Column("first_letter")
     private String firstLetter;
 
+    @NotBlank
     @ClusteringColumn
     private String tag;
 

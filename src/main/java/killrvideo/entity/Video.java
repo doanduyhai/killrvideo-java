@@ -6,15 +6,16 @@ import java.util.Date;
 import java.util.Set;
 import java.util.UUID;
 
-import com.google.common.collect.Sets;
+import javax.validation.constraints.NotNull;
+
+import org.hibernate.validator.constraints.NotBlank;
 
 import info.archinnov.achilles.annotations.Column;
+import info.archinnov.achilles.annotations.EmptyCollectionIfNull;
 import info.archinnov.achilles.annotations.PartitionKey;
 import info.archinnov.achilles.annotations.Table;
 import killrvideo.utils.TypeConverter;
-import killrvideo.video_catalog.VideoCatalogServiceOuterClass;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetVideoResponse;
-import killrvideo.video_catalog.VideoCatalogServiceOuterClass.SubmitUploadedVideoRequest;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoLocationType;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 
@@ -24,28 +25,33 @@ public class Video extends AbstractVideo{
     @PartitionKey
     private UUID videoid;
 
+    @NotNull
     @Column
     private UUID userid;
 
+    @NotBlank
     @Column
     private String description;
 
+    @NotBlank
     @Column
     private String location;
 
     @Column("location_type")
-    private String locationType;
+    private int locationType;
 
     @Column
+    @EmptyCollectionIfNull
     private Set<String> tags;
 
+    @NotNull
     @Column("added_date")
     private Date addedDate;
 
     public Video() {
     }
 
-    public Video(UUID videoid, UUID userid, String name, String description, String locationType, Set<String> tags, Date addedDate) {
+    public Video(UUID videoid, UUID userid, String name, String description, int locationType, Set<String> tags, Date addedDate) {
         this.videoid = videoid;
         this.userid = userid;
         this.name = name;
@@ -55,7 +61,7 @@ public class Video extends AbstractVideo{
         this.addedDate = addedDate;
     }
 
-    public Video(UUID videoid, UUID userid, String name, String description, String location, String locationType, String previewImageLocation, Set<String> tags, Date addedDate) {
+    public Video(UUID videoid, UUID userid, String name, String description, String location, int locationType, String previewImageLocation, Set<String> tags, Date addedDate) {
         this.videoid = videoid;
         this.userid = userid;
         this.name = name;
@@ -99,11 +105,11 @@ public class Video extends AbstractVideo{
         this.location = location;
     }
 
-    public String getLocationType() {
+    public int getLocationType() {
         return locationType;
     }
 
-    public void setLocationType(String locationType) {
+    public void setLocationType(int locationType) {
         this.locationType = locationType;
     }
 
@@ -133,9 +139,8 @@ public class Video extends AbstractVideo{
                 .setName(name)
                 .setUserId(TypeConverter.uuidToUuid(userid))
                 .setVideoId(TypeConverter.uuidToUuid(videoid))
+                .addAllTags(tags)
                 .build();
-
-        videoResponse.getTagsList().addAll(tags);
 
         return videoResponse;
     }

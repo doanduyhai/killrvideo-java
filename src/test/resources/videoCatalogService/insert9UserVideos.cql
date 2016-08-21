@@ -1,0 +1,9 @@
+INSERT INTO killrvideo.user_videos(userid, added_date, videoid, name) VALUES(${userid}, '2016-08-01 12:00:00.000+0000', 00000000-1111-0000-0000-000000000000, 'user_video1.mp4');
+INSERT INTO killrvideo.user_videos(userid, added_date, videoid, name) VALUES(${userid}, '2016-08-02 12:00:00.000+0000', 00000000-1112-0000-0000-000000000000, 'user_video2.mp4');
+INSERT INTO killrvideo.user_videos(userid, added_date, videoid, name) VALUES(${userid}, '2016-08-03 12:00:00.000+0000', 00000000-1113-0000-0000-000000000000, 'user_video3.mp4');
+INSERT INTO killrvideo.user_videos(userid, added_date, videoid, name) VALUES(${userid}, '2016-08-04 12:00:00.000+0000', 00000000-1114-0000-0000-000000000000, 'user_video4.mp4');
+INSERT INTO killrvideo.user_videos(userid, added_date, videoid, name) VALUES(${userid}, '2016-08-05 12:00:00.000+0000', 00000000-1115-0000-0000-000000000000, 'user_video5.mp4');
+INSERT INTO killrvideo.user_videos(userid, added_date, videoid, name) VALUES(${userid}, '2016-08-06 12:00:00.000+0000', 00000000-1116-0000-0000-000000000000, 'user_video6.mp4');
+INSERT INTO killrvideo.user_videos(userid, added_date, videoid, name) VALUES(${userid}, '2016-08-07 12:00:00.000+0000', 00000000-1117-0000-0000-000000000000, 'user_video7.mp4');
+INSERT INTO killrvideo.user_videos(userid, added_date, videoid, name) VALUES(${userid}, '2016-08-08 12:00:00.000+0000', 00000000-1118-0000-0000-000000000000, 'user_video8.mp4');
+INSERT INTO killrvideo.user_videos(userid, added_date, videoid, name) VALUES(${userid}, '2016-08-09 12:00:00.000+0000', 00000000-1119-0000-0000-000000000000, 'user_video9.mp4');

@@ -2,10 +2,16 @@ package killrvideo.entity;
 
 import static java.util.UUID.fromString;
 import static killrvideo.entity.Schema.KEYSPACE;
+import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
 import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
+
+import javax.validation.constraints.NotNull;
+
+import org.apache.commons.lang3.StringUtils;
+import org.hibernate.validator.constraints.NotBlank;
 
 import info.archinnov.achilles.annotations.*;
 import killrvideo.comments.CommentsServiceOuterClass;
@@ -22,17 +28,27 @@ public class CommentsByUser {
     @TimeUUID
     private UUID commentid;
 
+    @NotNull
     @Column
     private UUID videoid;
 
+    @NotBlank
     @Column
     private String comment;
 
     @Column
+    @NotNull
     @Computed(function = "toTimestamp", targetColumns = {"commentid"}, alias = "comment_timestamp", cqlClass = Date.class)
     private Date dateOfComment;
 
     public CommentsByUser() {
+    }
+
+    public CommentsByUser(UUID userid, UUID videoid, UUID commentid, String comment) {
+        this.userid = userid;
+        this.commentid = commentid;
+        this.videoid = videoid;
+        this.comment = comment;
     }
 
     public CommentsByUser(CommentOnVideoRequest request) {

@@ -14,6 +14,7 @@ public class HashUtils {
         if (isBlank(realPassword) || isBlank(hash)) {
             return false;
         }
-        return new String(DigestUtils.getSha512Digest().digest(realPassword.trim().getBytes())).compareTo(hash.trim()) == 0;
+
+        return hashPassword(realPassword.trim()).compareTo(hash) == 0;
     }
 }

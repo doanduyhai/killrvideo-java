@@ -7,7 +7,12 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
+import javax.validation.constraints.NotNull;
+
+import org.hibernate.validator.constraints.NotBlank;
+
 import info.archinnov.achilles.annotations.*;
+import info.archinnov.achilles.validation.Validator;
 import killrvideo.comments.CommentsServiceOuterClass;
 import killrvideo.comments.CommentsServiceOuterClass.CommentOnVideoRequest;
 import killrvideo.utils.TypeConverter;
@@ -22,12 +27,15 @@ public class CommentsByVideo {
     @TimeUUID
     private UUID commentid;
 
+    @NotNull
     @Column
     private UUID userid;
 
+    @NotBlank
     @Column
     private String comment;
 
+    @NotNull
     @Column
     @Computed(function = "toTimestamp", targetColumns = {"commentid"}, alias = "comment_timestamp", cqlClass = Date.class)
     private Date dateOfComment;
