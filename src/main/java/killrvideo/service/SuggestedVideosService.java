@@ -63,7 +63,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                 .select()
                 .allColumns_FromBaseTable()
                 .where()
-                .videoid_Eq(videoId)
+                .videoid().Eq(videoId)
                 .getOne();
 
         if (video == null) {
@@ -98,7 +98,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                             .select()
                             .allColumns_FromBaseTable()
                             .where()
-                            .tag_Eq(tag)
+                            .tag().Eq(tag)
                             .withFetchSize(pageSize)
                             .getListAsync();
 

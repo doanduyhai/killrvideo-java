@@ -417,8 +417,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                             .select()
                             .allColumns_FromBaseTable()
                             .where()
-                            .yyyymmdd_Eq(yyyyMMdd)
-                            .addedDate_And_videoid_Lte(startingAddedDate.get(), startingVideoId.get())
+                            .yyyymmdd().Eq(yyyyMMdd)
+                            .addedDate_And_videoid().Lte(startingAddedDate.get(), startingVideoId.get())
                             .withFetchSize(recordsStillNeeded)
                             .getListWithStats();
                 } else {
@@ -428,7 +428,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                             .select()
                             .allColumns_FromBaseTable()
                             .where()
-                            .yyyymmdd_Eq(yyyyMMdd)
+                            .yyyymmdd().Eq(yyyyMMdd)
                             .withFetchSize(recordsStillNeeded)
                             .withOptionalPagingStateString(pagingStateString)
                             .getListWithStats();
@@ -511,8 +511,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     .select()
                     .allColumns_FromBaseTable()
                     .where()
-                    .userid_Eq(userId)
-                    .addedDate_And_videoid_Lte(startingAddedDate.get(), startingVideoId.get())
+                    .userid().Eq(userId)
+                    .addedDate_And_videoid().Lte(startingAddedDate.get(), startingVideoId.get())
                     .withFetchSize(request.getPageSize())
                     .getListAsyncWithStats();
 
@@ -522,7 +522,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     .select()
                     .allColumns_FromBaseTable()
                     .where()
-                    .userid_Eq(userId)
+                    .userid().Eq(userId)
                     .withFetchSize(request.getPageSize())
                     .withOptionalPagingStateString(pagingStateString)
                     .getListAsyncWithStats();

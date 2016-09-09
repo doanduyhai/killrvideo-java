@@ -61,9 +61,9 @@ public class StatisticsService extends AbstractStatisticsService {
                 .dsl()
                 .update()
                 .fromBaseTable()
-                .views_Incr()
+                .views().Incr()
                 .where()
-                .videoid_Eq(videoId)
+                .videoid().Eq(videoId)
                 .executeAsync()
                 .handle((rs, ex) -> {
                     if (rs != null) {

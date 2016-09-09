@@ -199,7 +199,7 @@ public class UserManagementService extends AbstractUserManagementService {
                 .select()
                 .allColumns_FromBaseTable()
                 .where()
-                .userid_IN(userIds)
+                .userid().IN(userIds)
                 .getListAsync()
                 .handle((entities, ex) -> {
                     if (entities != null) {

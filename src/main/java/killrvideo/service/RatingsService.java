@@ -66,10 +66,10 @@ public class RatingsService extends AbstractRatingsService {
                 .dsl()
                 .update()
                 .fromBaseTable()
-                .ratingCounter_Incr()
-                .ratingTotal_Incr(new Long(request.getRating()))
+                .ratingCounter().Incr()
+                .ratingTotal().Incr(new Long(request.getRating()))
                 .where()
-                .videoid_Eq(videoId)
+                .videoid().Eq(videoId)
                 .executeAsync();
 
         /**

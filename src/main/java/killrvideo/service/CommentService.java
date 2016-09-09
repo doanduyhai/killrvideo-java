@@ -146,7 +146,7 @@ public class CommentService extends AbstractCommentsService {
                     .dateOfComment()
                     .fromBaseTable()
                     .where()
-                    .userid_Eq(fromString(request.getUserId().getValue()))
+                    .userid().Eq(fromString(request.getUserId().getValue()))
                     .withFetchSize(request.getPageSize())
                     .withOptionalPagingStateString(pagingStateString)
                     .getListAsyncWithStats();
@@ -166,8 +166,8 @@ public class CommentService extends AbstractCommentsService {
                     .dateOfComment()
                     .fromBaseTable()
                     .where()
-                    .userid_Eq(fromString(request.getUserId().getValue()))
-                    .commentid_Lte(fromString(request.getStartingCommentId().getValue()))
+                    .userid().Eq(fromString(request.getUserId().getValue()))
+                    .commentid().Lte(fromString(request.getStartingCommentId().getValue()))
                     .withFetchSize(request.getPageSize())
                     .getListAsyncWithStats();
         }
@@ -224,7 +224,7 @@ public class CommentService extends AbstractCommentsService {
                     .dateOfComment()
                     .fromBaseTable()
                     .where()
-                    .videoid_Eq(fromString(request.getVideoId().getValue()))
+                    .videoid().Eq(fromString(request.getVideoId().getValue()))
                     .withFetchSize(request.getPageSize())
                     .withOptionalPagingStateString(pagingStateString)
                     .getListAsyncWithStats();
@@ -244,8 +244,8 @@ public class CommentService extends AbstractCommentsService {
                     .dateOfComment()
                     .fromBaseTable()
                     .where()
-                    .videoid_Eq(fromString(request.getVideoId().getValue()))
-                    .commentid_Lte(fromString(request.getStartingCommentId().getValue()))
+                    .videoid().Eq(fromString(request.getVideoId().getValue()))
+                    .commentid().Lte(fromString(request.getStartingCommentId().getValue()))
                     .withFetchSize(request.getPageSize())
                     .getListAsyncWithStats();
         }
