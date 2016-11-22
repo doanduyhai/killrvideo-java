@@ -11,7 +11,7 @@
     <properties>
         <start-class>killrvideo.KillrVideoServer</start-class>
         <grpc.version>1.0.0-pre1</grpc.version>
-        <achilles.version>5.0.0</achilles.version>
+        <achilles.version>5.1.5</achilles.version>
         <commons.lang3.version>3.3.2</commons.lang3.version>
         <commons-codec.version>1.10</commons-codec.version>
         <javax.inject.version>1</javax.inject.version>
