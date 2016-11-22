@@ -19,9 +19,9 @@ To get the Java impl running:
 * First clone the project with `git clone https://github.com/doanduyhai/killrvideo-java.git`
 * Do a clean compile with `mvn clean test`
 * Start your local docker machine
+* Execute the script _getenvirongment.sh_ to set environment variables with `. ./getenvironment.sh` 
 * To run **KillrVideo** with OSS Cassandra, execute `docker-compose -f DockerCompose/docker-compose-OSS-Cassandra.yaml up`
-* To run **KillrVideo** with [DataStax Enterprise][dse], execute `docker-compose -f DockerCompose/docker-compose-DSE-Cassandra.yaml up`
-* Execute the script _getenvironment.sh_ to set environment variables with `. ./getenvironment.sh` 
+* To run **KillrVideo** with [DataStax Enterprise][dse], execute `docker-compose -f DockerCompose/docker-compose-DSE.yaml up`
 
 > **warning: the first dot (.) is important! It will execute the script in the context of the calling shell**
 <br/>
@@ -33,7 +33,7 @@ After the script execution, you should be able to see the environment variables:
  
 * Start **KillrVideo** server with `mvn spring-boot:run -Dlogback.configurationFile=./src/main/resources/<logback_conf>` 
 
- where &lt;logback_conf&gt; can be either **logback_dev.xml** or **logback_dev.xml**. The dev configuration file will show you all the
+ where &lt;logback_conf&gt; can be either **logback_dev.xml** or **logback_prod.xml**. The dev configuration file will show you all the
 DML logs and DEBUG messages:
 
 ```
@@ -51,7 +51,7 @@ DML logs and DEBUG messages:
 17:08:50.192 [achilles-default-executor-2] DEBUG killrvideo.entity.LatestVideos:Query ID 7737c8c3-f4d3-4f9e-82fe-0c2f49d0c1db results :
 ...
 ```
-* Open your web browser at **$KILLRVIDEO_HOST_IP:3000** to start using **KillrVideo**
+* Open your web browser at **$KILLRVIDEO_DOCKER_IP:3000** to start using **KillrVideo**
   
 
 ## Pull Requests, Requests for More Examples
