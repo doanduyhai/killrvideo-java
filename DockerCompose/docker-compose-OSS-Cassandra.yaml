@@ -36,7 +36,7 @@ services:
   
   #Web front end
   web:
-    image: killrvideo/killrvideo-web:1.1.2
+    image: killrvideo/killrvideo-web:1.2.0
     ports:
     - "3000:3000"
     depends_on:
