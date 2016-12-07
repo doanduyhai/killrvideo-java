@@ -10,7 +10,7 @@
 
     <properties>
         <start-class>killrvideo.KillrVideoServer</start-class>
-        <grpc.version>1.0.0-pre1</grpc.version>
+        <grpc.version>1.0.0</grpc.version>
         <achilles.version>5.1.5</achilles.version>
         <commons.lang3.version>3.3.2</commons.lang3.version>
         <commons-codec.version>1.10</commons-codec.version>
@@ -180,7 +180,7 @@
                       protobuf-java directly, you will be transitively depending on the
                       protobuf-java version that grpc depends on.
                     -->
-                    <protocArtifact>com.google.protobuf:protoc:3.0.0-beta-2:exe:${os.detected.classifier}</protocArtifact>
+                    <protocArtifact>com.google.protobuf:protoc:3.0.0:exe:${os.detected.classifier}</protocArtifact>
                     <pluginId>grpc-java</pluginId>
                     <pluginArtifact>io.grpc:protoc-gen-grpc-java:0.14.0:exe:${os.detected.classifier}</pluginArtifact>
                 </configuration>

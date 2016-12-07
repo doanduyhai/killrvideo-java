@@ -1,7 +1,7 @@
 # KillrVideo Java #
 
 A reference application for Java developers looking to learn more about using [Apache Cassandra][cassandra] and
-[DataStax Enterprise][dse] in their applications and services. Learn more at [killrvideo.github.io][killrvideo].
+[DataStax Enterprise][dse] in their applications and services. Learn more at [KillrVideo].
 
 ## Running Locally
 
@@ -11,7 +11,7 @@ Use these guides to get started running KillrVideo locally on your development m
 
 ## Getting started with Java <a id="getting-started-java"></a>
 
-The Java implementation of [killrvideo] is using [Achilles Object Mapper]. Please read its documentation to understand
+The Java implementation of [Killrvideo] is using [Achilles Object Mapper]. Please read its documentation to understand
 the complete set of features of the framework
 
 To get the Java impl running:
@@ -75,8 +75,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 [cassandra]: http://cassandra.apache.org/
-[dse]: http://www.datastax.com/products/datastax-enterprise
-[killrvideo]: https://killrvideo.github.io/
+[dse]: http://www.datastax.com/products/datastax-enterprise 
+[Killrvideo]: https://killrvideo.github.io
 [getting-started]: https://killrvideo.github.io/getting-started/
 [getting-started-csharp]: https://killrvideo.github.io/docs/languages/c-sharp/
 [twitter]: https://twitter.com/doanduyhai
