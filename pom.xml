@@ -12,6 +12,8 @@
         <start-class>killrvideo.KillrVideoServer</start-class>
         <grpc.version>1.0.0</grpc.version>
         <achilles.version>5.1.5</achilles.version>
+        <dse.version>1.1.1</dse.version>
+        <guava.version>18.0</guava.version>
         <commons.lang3.version>3.3.2</commons.lang3.version>
         <commons-codec.version>1.10</commons-codec.version>
         <javax.inject.version>1</javax.inject.version>
@@ -41,6 +43,34 @@
                     <artifactId>netty-handler</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- Java driver for DSE -->
+        <!-- Note: I copied the netty-handler exclusion from what
+        DuyHai did with Achilles to resolve issues I was having
+        with the Netty Handler.  Not sure why this works, didn't
+        really look into it, but it does.  -->
+        <dependency>
+            <groupId>com.datastax.cassandra</groupId>
+            <artifactId>dse-driver</artifactId>
+            <version>${dse.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-handler</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- Added explicit call to guava version 18 because of a conflict
+         between the dependency in the DSE driver and the one used by the
+         core cassandra driver.  Actual call is to MoreExecutors.newDirectExecutorService()
+         in both CommentServiceTest and VideoCatalogServiceTest.  newDirectExecutorService()
+         does not exist in a previous version called by the DSE library. -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>${guava.version}</version>
         </dependency>
 
         <!-- Bean Validation -->
