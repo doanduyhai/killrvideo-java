@@ -2,15 +2,19 @@ package killrvideo.entity;
 
 import static killrvideo.entity.Schema.KEYSPACE;
 
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+//import info.archinnov.achilles.annotations.Column;
+//import info.archinnov.achilles.annotations.PartitionKey;
+//import info.archinnov.achilles.annotations.Table;
 
-@Table(keyspace = KEYSPACE, table = "uploaded_video_destinations")
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+
+@Table(keyspace = KEYSPACE, name = "uploaded_video_destinations")
 public class UploadedVideoDestinations {
 
     @PartitionKey
-    @Column("upload_url")
+    @Column(name = "upload_url")
     private String uploadUrl;
 
     @Column

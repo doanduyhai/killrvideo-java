@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service;
 
 import com.datastax.driver.core.PagingState;
 
-import info.archinnov.achilles.generated.manager.TagsByLetter_Manager;
-import info.archinnov.achilles.generated.manager.VideoByTag_Manager;
+//import info.archinnov.achilles.generated.manager.TagsByLetter_Manager;
+//import info.archinnov.achilles.generated.manager.VideoByTag_Manager;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import killrvideo.search.SearchServiceGrpc.AbstractSearchService;
@@ -28,11 +28,14 @@ public class SearchService extends AbstractSearchService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SearchService.class);
 
+    //:TODO Fix this
+    /*
     @Inject
     VideoByTag_Manager videoByTagManager;
 
     @Inject
     TagsByLetter_Manager tagsByLetterManager;
+    */
 
     @Inject
     KillrVideoInputValidator validator;
@@ -42,6 +45,8 @@ public class SearchService extends AbstractSearchService {
 
         LOGGER.debug("Start searching video by tag");
 
+        //:TODO Fix this
+        /*
         if (!validator.isValid(request, responseObserver)) {
             return;
         }
@@ -80,6 +85,7 @@ public class SearchService extends AbstractSearchService {
                     }
                     return tuple2;
                 });
+        */
     }
 
     @Override
@@ -87,6 +93,8 @@ public class SearchService extends AbstractSearchService {
 
         LOGGER.debug("Start getting query suggestions by tag");
 
+        //:TODO Fix this
+        /*
         if (!validator.isValid(request, responseObserver)) {
             return;
         }
@@ -119,6 +127,7 @@ public class SearchService extends AbstractSearchService {
                     }
                     return entities;
                 });
+        */
     }
 
 }

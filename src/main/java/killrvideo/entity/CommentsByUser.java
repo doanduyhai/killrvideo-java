@@ -13,19 +13,21 @@ import javax.validation.constraints.NotNull;
 import org.apache.commons.lang3.StringUtils;
 import org.hibernate.validator.constraints.NotBlank;
 
-import info.archinnov.achilles.annotations.*;
+//import info.archinnov.achilles.annotations.*;
+import com.datastax.driver.mapping.annotations.*;
 import killrvideo.comments.CommentsServiceOuterClass;
 import killrvideo.comments.CommentsServiceOuterClass.CommentOnVideoRequest;
 import killrvideo.utils.TypeConverter;
 
-@Table(keyspace = KEYSPACE, table = "comments_by_user")
+@Table(keyspace = KEYSPACE, name = "comments_by_user")
 public class CommentsByUser {
 
     @PartitionKey
     private UUID userid;
 
-    @ClusteringColumn(asc = false)
-    @TimeUUID
+    @ClusteringColumn
+    //:TODO Is there TimeUUID support in DSE driver?
+    //@TimeUUID
     private UUID commentid;
 
     @NotNull
@@ -38,7 +40,8 @@ public class CommentsByUser {
 
     @Column
     @NotNull
-    @Computed(function = "toTimestamp", targetColumns = {"commentid"}, alias = "comment_timestamp", cqlClass = Date.class)
+    //:TODO figure out to to convert Computed annotation
+    //@Computed(function = "toTimestamp", targetColumns = {"commentid"}, alias = "comment_timestamp", cqlClass = Date.class)
     private Date dateOfComment;
 
     public CommentsByUser() {

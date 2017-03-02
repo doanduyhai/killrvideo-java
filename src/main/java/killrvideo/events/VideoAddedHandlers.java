@@ -16,8 +16,8 @@ import com.datastax.driver.core.Session;
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.Subscribe;
 
-import info.archinnov.achilles.generated.manager.TagsByLetter_Manager;
-import info.archinnov.achilles.generated.manager.VideoByTag_Manager;
+//import info.archinnov.achilles.generated.manager.TagsByLetter_Manager;
+//import info.archinnov.achilles.generated.manager.VideoByTag_Manager;
 import killrvideo.entity.TagsByLetter;
 import killrvideo.entity.VideoByTag;
 import killrvideo.utils.FutureUtils;
@@ -29,11 +29,14 @@ public class VideoAddedHandlers {
 
     private static Logger LOGGER = LoggerFactory.getLogger(VideoAddedHandlers.class);
 
+    //:TODO Fix this
+    /*
     @Inject
     VideoByTag_Manager videoByTagManager;
 
     @Inject
     TagsByLetter_Manager tagsByLetterManager;
+    */
 
     @Inject
     ExecutorService executorService;
@@ -53,30 +56,31 @@ public class VideoAddedHandlers {
 
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
 
-        tags.forEach(tag -> {
-
-            batchStatement.add(videoByTagManager
-                    .crud()
-                    .insert(new VideoByTag(tag, videoId, userId, name, previewImageLocation, addedDate, taggedDate))
-                    .generateAndGetBoundStatement());
-
-            batchStatement.add(tagsByLetterManager
-                    .crud()
-                    .insert(new TagsByLetter(tag.substring(0,1), tag))
-                    .generateAndGetBoundStatement());
-        });
-
-        batchStatement.setDefaultTimestamp(taggedDate.getTime());
-
-        FutureUtils.buildCompletableFuture(videoByTagManager.getNativeSession().executeAsync(batchStatement))
-            .handle((rs, ex) -> {
-                if (rs != null) {
-                    LOGGER.debug("End handling YouTubeVideoAdded");
-                }
-                if (ex != null) {
-
-                }
-                return rs;
-            });
+        //:TODO Fix this
+//        tags.forEach(tag -> {
+//
+//            batchStatement.add(videoByTagManager
+//                    .crud()
+//                    .insert(new VideoByTag(tag, videoId, userId, name, previewImageLocation, addedDate, taggedDate))
+//                    .generateAndGetBoundStatement());
+//
+//            batchStatement.add(tagsByLetterManager
+//                    .crud()
+//                    .insert(new TagsByLetter(tag.substring(0,1), tag))
+//                    .generateAndGetBoundStatement());
+//        });
+//
+//        batchStatement.setDefaultTimestamp(taggedDate.getTime());
+//
+//        FutureUtils.buildCompletableFuture(videoByTagManager.getNativeSession().executeAsync(batchStatement))
+//            .handle((rs, ex) -> {
+//                if (rs != null) {
+//                    LOGGER.debug("End handling YouTubeVideoAdded");
+//                }
+//                if (ex != null) {
+//
+//                }
+//                return rs;
+//            });
     }
 }

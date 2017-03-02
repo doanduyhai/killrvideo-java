@@ -16,6 +16,7 @@
         <guava.version>18.0</guava.version>
         <commons.lang3.version>3.3.2</commons.lang3.version>
         <commons-codec.version>1.10</commons-codec.version>
+        <commons-collections.version>4.1</commons-collections.version>
         <javax.inject.version>1</javax.inject.version>
         <spring-boot.version>1.4.0.RELEASE</spring-boot.version>
         <logback.version>1.1.2</logback.version>
@@ -45,6 +46,16 @@
             </exclusions>
         </dependency>
 
+        <!-- Even though the point here is to go "pure"
+        java, Achilles has some really useful utilities
+        that I am not ready to tackle just yet so I am including
+        pieces and parts to handle those until a later time. -->
+        <!-- <dependency>
+            <groupId>info.archinnov</groupId>
+            <artifactId>achilles-common</artifactId>
+            <version>${achilles.version}</version>
+        </dependency> -->
+
         <!-- Java driver for DSE -->
         <!-- Note: I copied the netty-handler exclusion from what
         DuyHai did with Achilles to resolve issues I was having
@@ -60,6 +71,16 @@
                     <artifactId>netty-handler</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- Include the object mapper from the provided Cassandra
+        driver seen here -> http://docs.datastax.com/en/developer/java-driver/3.1/manual/object_mapper
+        This should help replace some of the lost boiler plate
+        capabilities we had from Achilles -->
+        <dependency>
+            <groupId>com.datastax.cassandra</groupId>
+            <artifactId>cassandra-driver-mapping</artifactId>
+            <version>3.1.0</version>
         </dependency>
 
         <!-- Added explicit call to guava version 18 because of a conflict
@@ -105,6 +126,12 @@
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
             <version>${commons-codec.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-collections4</artifactId>
+            <version>${commons-collections.version}</version>
         </dependency>
 
         <dependency>

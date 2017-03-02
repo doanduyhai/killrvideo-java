@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 
 import com.google.common.eventbus.EventBus;
 
-import info.archinnov.achilles.generated.manager.VideoPlaybackStats_Manager;
+//import info.archinnov.achilles.generated.manager.VideoPlaybackStats_Manager;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import killrvideo.common.CommonTypes.Uuid;
@@ -31,8 +31,11 @@ public class StatisticsService extends AbstractStatisticsService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StatisticsService.class);
 
+    //:TODO Fix this
+    /*
     @Inject
     VideoPlaybackStats_Manager videoPlaybackStatsManager;
+    */
 
     @Inject
     KillrVideoInputValidator validator;
@@ -57,6 +60,8 @@ public class StatisticsService extends AbstractStatisticsService {
          * a mutation log file for later replay by another
          * micro-service
          */
+        //:TODO Fix this
+        /*
         videoPlaybackStatsManager
                 .dsl()
                 .update()
@@ -81,6 +86,7 @@ public class StatisticsService extends AbstractStatisticsService {
                     }
                     return rs;
                 });
+        */
     }
 
     @Override
@@ -92,6 +98,8 @@ public class StatisticsService extends AbstractStatisticsService {
             return;
         }
 
+        //:TODO Fix this
+        /*
         final List<CompletableFuture<VideoPlaybackStats>> statsFuture = request
                 .getVideoIdsList()
                 .stream()
@@ -101,11 +109,14 @@ public class StatisticsService extends AbstractStatisticsService {
 
         final GetNumberOfPlaysResponse.Builder builder = GetNumberOfPlaysResponse
                 .newBuilder();
+        */
 
         /**
          * We fire a list of async SELECT request and wait for all of them
          * to complete before returning a response to the client
          */
+        //:TODO Fix this
+        /*
         CompletableFuture
                 .allOf(statsFuture.toArray(new CompletableFuture[statsFuture.size()]))
                 .thenApply(v -> statsFuture.stream().map(CompletableFuture::join).collect(toList()))
@@ -141,5 +152,6 @@ public class StatisticsService extends AbstractStatisticsService {
                     }
                     return list;
                 });
+        */
     }
 }

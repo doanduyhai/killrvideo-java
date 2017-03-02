@@ -5,28 +5,34 @@ import static killrvideo.entity.Schema.KEYSPACE;
 import java.util.Date;
 import java.util.UUID;
 
-import info.archinnov.achilles.annotations.*;
+//import info.archinnov.achilles.annotations.*;
 
-@Table(keyspace = KEYSPACE, table = "video_recommendations_by_video")
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+import com.datastax.driver.mapping.annotations.ClusteringColumn;
+
+@Table(keyspace = KEYSPACE, name = "video_recommendations_by_video")
 public class VideoRecommandationsByVideo {
 
     @PartitionKey
     private UUID videoid;
 
-    @Column("added_date")
-    @Static
+    @Column(name = "added_date")
+    //:TODO Figure out if Static annotation supported by DSE driver
+    //@Static
     private Date addedDate;
 
     @Column
-    @Static
+    //@Static
     private UUID authorid;
 
     @Column
-    @Static
+    //@Static
     private String name;
 
-    @Column("preview_image_location")
-    @Static
+    @Column(name = "preview_image_location")
+    //@Static
     private String previewImageLocation;
 
     @ClusteringColumn

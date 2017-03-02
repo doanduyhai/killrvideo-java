@@ -3,13 +3,15 @@ package killrvideo.entity;
 import java.util.Date;
 import java.util.UUID;
 
-import info.archinnov.achilles.annotations.ClusteringColumn;
-import info.archinnov.achilles.annotations.Column;
+//import info.archinnov.achilles.annotations.ClusteringColumn;
+//import info.archinnov.achilles.annotations.Column;
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.ClusteringColumn;
 
 public class AbstractVideoList extends AbstractVideo {
 
-    @ClusteringColumn(value = 1, asc = false)
-    @Column("added_date")
+    @ClusteringColumn(1)
+    @Column(name = "added_date")
     protected Date addedDate;
 
     @ClusteringColumn(2)

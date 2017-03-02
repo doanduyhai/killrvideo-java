@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 
+//import com.sun.tools.javac.code.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -16,9 +17,10 @@ import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Session;
 import com.xqbase.etcd4j.EtcdClient;
 
-import info.archinnov.achilles.generated.ManagerFactory;
-import info.archinnov.achilles.generated.ManagerFactoryBuilder;
+//import info.archinnov.achilles.generated.ManagerFactory;
+//import info.archinnov.achilles.generated.ManagerFactoryBuilder;
 import info.archinnov.achilles.script.ScriptExecutor;
+import com.datastax.driver.mapping.MappingManager;
 import killrvideo.utils.ExceptionUtils;
 
 
@@ -35,8 +37,10 @@ public class CassandraConfiguration {
     @Inject
     EtcdClient etcdClient;
 
-    @Bean(destroyMethod = "shutDown")
-    public ManagerFactory cassandraNativeClusterProduction() {
+    //@Bean(destroyMethod = "shutDown")
+    @Bean
+    //public ManagerFactory cassandraNativeClusterProduction() {
+    public MappingManager cassandraNativeClusterProduction() {
 
         LOGGER.info("Initializing connection to Cassandra");
 
@@ -70,13 +74,17 @@ public class CassandraConfiguration {
 
             maybeCreateSchema(session);
 
-            final ManagerFactory factory = ManagerFactoryBuilder
+            final MappingManager manager = new MappingManager(session);
+            LOGGER.info(String.format("Creating mapping manager %s", manager));
+
+            /* final ManagerFactory factory = ManagerFactoryBuilder
                     .builder(cluster)
                     .withBeanValidation(true)
                     .withPostLoadBeanValidation(true)
-                    .build();
+                    .build(); */
 
-            return factory;
+            //return factory;
+            return manager;
 
         } catch (Throwable e) {
 
@@ -88,9 +96,13 @@ public class CassandraConfiguration {
     }
 
     private void maybeCreateSchema(Session session) {
+        //:TODO Figure out how to replace ScriptExecutor, maybe
         LOGGER.info("Execute schema creation script 'schema.cql' if necessary");
         final ScriptExecutor scriptExecutor = new ScriptExecutor(session);
         scriptExecutor.executeScript("schema.cql");
+    }
 
+    public void shutDown() {
+        LOGGER.info("SHUTDOWN called");
     }
 }

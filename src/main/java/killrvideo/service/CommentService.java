@@ -1,6 +1,6 @@
 package killrvideo.service;
 
-import static info.archinnov.achilles.internals.futures.FutureUtils.toCompletableFuture;
+//import static info.archinnov.achilles.internals.futures.FutureUtils.toCompletableFuture;
 import static java.util.UUID.fromString;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 import static org.apache.commons.lang3.StringUtils.isBlank;
@@ -21,9 +21,9 @@ import org.springframework.stereotype.Service;
 import com.datastax.driver.core.*;
 import com.google.common.eventbus.EventBus;
 
-import info.archinnov.achilles.generated.manager.CommentsByUser_Manager;
-import info.archinnov.achilles.generated.manager.CommentsByVideo_Manager;
-import info.archinnov.achilles.type.tuples.Tuple2;
+//import info.archinnov.achilles.generated.manager.CommentsByUser_Manager;
+//import info.archinnov.achilles.generated.manager.CommentsByVideo_Manager;
+//import info.archinnov.achilles.type.tuples.Tuple2;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import killrvideo.comments.CommentsServiceGrpc.AbstractCommentsService;
@@ -41,11 +41,14 @@ public class CommentService extends AbstractCommentsService {
 
     private static Logger LOGGER = LoggerFactory.getLogger(CommentService.class);
 
+    //:TODO Replace Comments managers
+    /*
     @Inject
     CommentsByUser_Manager commentsByUserManager;
 
     @Inject
     CommentsByVideo_Manager commentsByVideoManager;
+    */
 
     @Inject
     EventBus eventBus;
@@ -58,10 +61,11 @@ public class CommentService extends AbstractCommentsService {
 
     Session session;
 
-    @PostConstruct
+    //:TODO Fix this
+    /*@PostConstruct
     public void init(){
         this.session = commentsByUserManager.getNativeSession();
-    }
+    }*/
 
     @Override
     public void commentOnVideo(final CommentOnVideoRequest request, StreamObserver<CommentOnVideoResponse> responseObserver) {
@@ -77,8 +81,11 @@ public class CommentService extends AbstractCommentsService {
         final CommentsByVideo commentsByVideo = new CommentsByVideo(request);
         final CommentsByUser commentsByUser = new CommentsByUser(request);
 
+        //:TODO Fix this
+        /*
         final BoundStatement bs1 = commentsByUserManager.crud().insert(commentsByUser).generateAndGetBoundStatement();
         final BoundStatement bs2 = commentsByVideoManager.crud().insert(commentsByVideo).generateAndGetBoundStatement();
+        */
 
         /**
          * We need to insert into comments_by_user and comments_by_video
@@ -86,6 +93,8 @@ public class CommentService extends AbstractCommentsService {
          * in case of error
          */
 
+        //:TODO Fix this
+        /*
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
         batchStatement.add(bs1);
         batchStatement.add(bs2);
@@ -114,6 +123,7 @@ public class CommentService extends AbstractCommentsService {
                 }
                 return rs;
             });
+            */
     }
 
     @Override
@@ -125,17 +135,22 @@ public class CommentService extends AbstractCommentsService {
             return;
         }
 
+        //:TODO Fix this
+        /*
         final TimeUuid startingCommentId = request.getStartingCommentId();
         final CompletableFuture<Tuple2<List<CommentsByUser>, ExecutionInfo>> future;
         final Optional<String> pagingStateString = Optional
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
+        */
 
         /**
          * Query without startingCommentId to get a reference point
          * Normally, the requested fetch size/page size is 1 to get
          * the first user comment as reference point
          */
+        //TODO: Fix this
+        /*
         if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
             future = commentsByUserManager
                     .dsl()
@@ -152,10 +167,13 @@ public class CommentService extends AbstractCommentsService {
                     .getListAsyncWithStats();
 
         }
+        */
         /**
          * Subsequent requests always provide startingCommentId to load page
          * of user comments. Fetch size/page size is expected to be > 1
          */
+        //:TODO Fix this
+        /*
         else {
             future = commentsByUserManager
                     .dsl()
@@ -192,6 +210,7 @@ public class CommentService extends AbstractCommentsService {
             }
             return tuple2;
         });
+        */
     }
 
     @Override
@@ -203,17 +222,22 @@ public class CommentService extends AbstractCommentsService {
             return;
         }
 
+        //:TODO Fix this
+        /*
         final TimeUuid startingCommentId = request.getStartingCommentId();
         final CompletableFuture<Tuple2<List<CommentsByVideo>, ExecutionInfo>> future;
         final Optional<String> pagingStateString = Optional
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
+        */
 
         /**
          * Query without startingCommentId to get a reference point
          * Normally, the requested fetch size/page size is 1 to get
          * the first video comment as reference point
          */
+        //:TODO Fix this
+        /*
         if (startingCommentId == null || isBlank(request.getStartingCommentId().getValue())) {
             future = commentsByVideoManager
                     .dsl()
@@ -230,10 +254,12 @@ public class CommentService extends AbstractCommentsService {
                     .getListAsyncWithStats();
 
         }
+        */
         /**
          * Subsequent requests always provide startingCommentId to load page
          * of video comments. Fetch size/page size is expected to be > 1
          */
+        /*
         else {
             future = commentsByVideoManager
                     .dsl()
@@ -270,5 +296,6 @@ public class CommentService extends AbstractCommentsService {
             }
             return tuple2;
         });
+        */
     }
 }
