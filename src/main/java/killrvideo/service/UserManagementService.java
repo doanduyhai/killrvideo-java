@@ -14,6 +14,7 @@ import javax.inject.Inject;
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.ResultSetFuture;
 import com.datastax.driver.core.querybuilder.BuiltStatement;
+import com.datastax.driver.core.utils.MoreFutures;
 import com.datastax.driver.mapping.Result;
 import com.datastax.driver.core.Statement;
 import com.google.common.util.concurrent.FutureCallback;
@@ -53,15 +54,6 @@ public class UserManagementService extends AbstractUserManagementService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UserManagementService.class);
 
-    //:TODO Fix this
-    /*
-    @Inject
-    UserCredentials_Manager userCredentialsManager;
-
-    @Inject
-    User_Manager userManager;
-    */
-
     @Inject
     Mapper<UserCredentials> userCredentialsMapper;
 
@@ -80,10 +72,7 @@ public class UserManagementService extends AbstractUserManagementService {
     @Override
     public void createUser(CreateUserRequest request, StreamObserver<CreateUserResponse> responseObserver) {
 
-        LOGGER.debug("Start creating user");
-
-        //userMapper = manager.mapper(User.class);
-        //userCredentialsMapper = manager.mapper(UserCredentials.class);
+        LOGGER.debug("-----Start creating user-----");
 
         if (!validator.isValid(request, responseObserver)) {
             return;
@@ -104,104 +93,121 @@ public class UserManagementService extends AbstractUserManagementService {
         final String email = request.getEmail();
         final String exceptionMessage = String.format("Exception creating user because it already exists with email %s", email);
 
-//        /**
-//         * We insert first the credentials since
-//         * the LWT condition is on the user email
-//         */
-//        userCredentialsManager
-//                .crud()
-//                .insert(new UserCredentials(email, hashedPassword, userId))
-//                .ifNotExists()
-//                .withLwtResultListener(error -> {
-//                        LOGGER.error(exceptionMessage);
-//                        emailAlreadyExists.getAndSet(true);
-//                        responseObserver.onError(Status.INVALID_ARGUMENT.augmentDescription(exceptionMessage).asRuntimeException());
-//                })
-//                .execute();
+        /**
+         * We insert first the credentials since
+         * the LWT condition is on the user email
+         */
+        //UserCredentials credentials = new UserCredentials(email, hashedPassword, userId);
 
-        // By using saveQuery instead save I get access to the
-        // result set and other options
-        Statement credentialsInsert = userCredentialsMapper
-                .saveQuery(new UserCredentials(email, hashedPassword, userId));
+        BuiltStatement checkEmailQuery = QueryBuilder
+                .insertInto(Schema.KEYSPACE, userCredentialsMapper.getTableMetadata().getName())
+                .value("email", email)
+                .value("pass", hashedPassword)
+                .value("userid", userId)
+                .ifNotExists(); // use lightweight transaction
 
-        ResultSet results = manager.getSession().execute(credentialsInsert);
-        Result<UserCredentials> userCredentials = userCredentialsMapper.map(results);
+        ResultSet checkEmailResult = manager.getSession().execute(checkEmailQuery);
 
-        LOGGER.debug("Credentials results: " + userCredentials.toString());
-
+        /** Check the result of the LWT, if it's false
+         * the email already exists within our user_credentials
+         * table and must not be duplicated.
+         * Note the use of wasApplied(), this is a convenience method
+         * described here ->
+         * http://docs.datastax.com/en/drivers/java/2.1/com/datastax/driver/core/ResultSet.html#wasApplied--
+         * that allows an easy check of a conditional statement.
+         */
+        if (!checkEmailResult.wasApplied()) {
+            emailAlreadyExists.getAndSet(true);
+            responseObserver.onError(Status.INVALID_ARGUMENT.augmentDescription(exceptionMessage).asRuntimeException());
+            LOGGER.debug("exception is: " + exceptionMessage);
+        }
 
         /**
          * No LWT error, we can proceed further
          */
-//        if (emailAlreadyExists.get() == false) {
-//            final AtomicBoolean userIdAlreadyExists = new AtomicBoolean(false);
-//
-//            userManager
-//                    .crud()
-//                    .insert(new User(userId, request.getFirstName(), request.getLastName(), email, now))
-//                    .usingTimestamp(now.getTime())
-//                    .withLwtResultListener(lwtResult -> {
-//                        LOGGER.error(exceptionMessage);
-//                        userIdAlreadyExists.getAndSet(true);
-//                        responseObserver.onError(Status.INTERNAL.augmentDescription(exceptionMessage).asRuntimeException());
-//                    })
-//                    .executeAsync()
-//                    .handle((rs, ex) -> {
-//                        /**
-//                         * Only return positive response if user id did not exist
-//                         */
-//                        if (ex == null && userIdAlreadyExists.get() == false) {
-//                            eventBus.post(UserCreated.newBuilder()
-//                                    .setUserId(request.getUserId())
-//                                    .setEmail(email)
-//                                    .setFirstName(request.getFirstName())
-//                                    .setLastName(request.getLastName())
-//                                    .setTimestamp(TypeConverter.instantToTimeStamp(now.toInstant()))
-//                                    .build());
-//                            responseObserver.onNext(CreateUserResponse.newBuilder().build());
-//                            responseObserver.onCompleted();
-//
-//                            LOGGER.debug("End creating user");
-//
-//                        } else if(ex != null){
-//                            LOGGER.error("Exception creating user : " + mergeStackTrace(ex));
-//
-//                            eventBus.post(new CassandraMutationError(request, ex));
-//                            responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-//                        }
-//                        return rs;
-//                    });
-//        }
+        if (!emailAlreadyExists.get()) {
+
+            /*Statement userInsert = userMapper
+                    .saveQuery(new User(userId, request.getFirstName(), request.getLastName(), email, now));*/
+
+            BuiltStatement userInsert = QueryBuilder
+                    .insertInto(Schema.KEYSPACE, userMapper.getTableMetadata().getName())
+                    .value("userid", userId)
+                    .value("firstname", request.getFirstName())
+                    .value("lastname", request.getLastName())
+                    .value("email", email)
+                    .value("created_date", now)
+                    .ifNotExists(); // use lightweight transaction
+
+            ResultSetFuture userResultsFuture = manager.getSession().executeAsync(userInsert);
+            Futures.addCallback(userResultsFuture,
+                    new FutureCallback<ResultSet>() {
+                        @Override
+                        public void onSuccess(@Nullable ResultSet result) {
+
+                            /** Check to see if userInsert was applied.
+                             * userId should be unique, if not, the insert
+                             * should fail
+                             */
+                            if (!result.wasApplied()) {
+                                Throwable t = new Throwable("User ID already exists");
+                                LOGGER.error("Exception creating user : " + mergeStackTrace(t));
+
+                                eventBus.post(new CassandraMutationError(request, t));
+                                responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
+
+                            } else {
+                                LOGGER.debug("User id is unique, creating user");
+                                eventBus.post(UserCreated.newBuilder()
+                                        .setUserId(request.getUserId())
+                                        .setEmail(email)
+                                        .setFirstName(request.getFirstName())
+                                        .setLastName(request.getLastName())
+                                        .setTimestamp(TypeConverter.instantToTimeStamp(now.toInstant()))
+                                        .build());
+                                responseObserver.onNext(CreateUserResponse.newBuilder().build());
+                                responseObserver.onCompleted();
+                            }
+
+                            LOGGER.debug("End creating user");
+                        }
+
+                        @Override
+                        public void onFailure(Throwable t) {
+                            LOGGER.error("Exception creating user : " + mergeStackTrace(t));
+
+                            eventBus.post(new CassandraMutationError(request, t));
+                            responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
+                        }
+                    },
+                    MoreExecutors.sameThreadExecutor()
+            );
+        }
 
     }
 
     @Override
     public void verifyCredentials(VerifyCredentialsRequest request, StreamObserver<VerifyCredentialsResponse> responseObserver) {
 
-        LOGGER.debug("Start verifying user credentials");
-
-        //userCredentialsMapper = manager.mapper(UserCredentials.class);
+        LOGGER.debug("------Start verifying user credentials------");
 
         if (!validator.isValid(request, responseObserver)) {
             return;
         }
 
-//        final UserCredentials one = userCredentialsManager
-//                .crud()
-//                .findById(request.getEmail())
-//                .get();
-
-        // Since email is the partitionKey for the UserCredentials
-        // entity I can simply pass it to the mapper get() method
-        // to get my result
+        /**
+         * Since email is the partitionKey for the UserCredentials
+         * entity I can simply pass it to the mapper get() method
+         * to get my result
+         */
         final UserCredentials one = userCredentialsMapper
                 .get(request.getEmail());
 
         if (one == null || !HashUtils.isPasswordValid(request.getPassword(), one.getPassword())) {
+            final String errorMessage = "Email address or password are not correct.";
 
-            LOGGER.error("Email address or password are not correct.");
-
-            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Email address or password are not correct.").asRuntimeException());
+            LOGGER.error(errorMessage);
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription(errorMessage).asRuntimeException());
 
         } else {
             responseObserver.onNext(VerifyCredentialsResponse
@@ -218,9 +224,7 @@ public class UserManagementService extends AbstractUserManagementService {
     @Override
     public void getUserProfile(GetUserProfileRequest request, StreamObserver<GetUserProfileResponse> responseObserver) {
 
-        LOGGER.debug("Start getting user profile");
-
-        //userMapper = manager.mapper(User.class);
+        LOGGER.debug("------Start getting user profile------");
 
         if (!validator.isValid(request, responseObserver)) {
             return;

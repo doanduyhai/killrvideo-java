@@ -19,10 +19,20 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
+import javax.annotation.Nullable;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.querybuilder.BuiltStatement;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.mapping.Result;
+import com.google.common.reflect.TypeToken;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
+import info.archinnov.achilles.type.tuples.Tuple;
+import killrvideo.entity.*;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,11 +54,6 @@ import com.google.common.eventbus.EventBus;
 //import info.archinnov.achilles.type.tuples.Tuple3;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-
-import killrvideo.entity.VideoRating;
-import killrvideo.entity.LatestVideos;
-import killrvideo.entity.UserVideos;
-import killrvideo.entity.Video;
 
 import killrvideo.events.CassandraMutationError;
 import killrvideo.common.CommonTypes.Uuid;
@@ -79,6 +84,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Inject
     LatestVideos_Manager latestVideosManager;
     */
+    @Inject
+    Mapper<Video> videoMapper;
 
     @Inject
     MappingManager manager;
@@ -105,7 +112,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Override
     public void submitUploadedVideo(SubmitUploadedVideoRequest request, StreamObserver<SubmitUploadedVideoResponse> responseObserver) {
 
-        LOGGER.debug("Start submitting uploaded video");
+        LOGGER.debug("-----Start submitting uploaded video-----");
 
         //:TODO Fix this
 //        if (!validator.isValid(request, responseObserver)) {
@@ -169,7 +176,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Override
     public void submitYouTubeVideo(SubmitYouTubeVideoRequest request, StreamObserver<SubmitYouTubeVideoResponse> responseObserver) {
 
-        LOGGER.debug("Start submitting youtube video");
+        LOGGER.debug("-----Start submitting youtube video-----");
 
         //:TODO Fix this
 //        if (!validator.isValid(request, responseObserver)) {
@@ -248,7 +255,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Override
     public void getVideo(GetVideoRequest request, StreamObserver<GetVideoResponse> responseObserver) {
 
-        LOGGER.debug("Start getting video");
+        LOGGER.debug("-----Start getting video-----");
         LOGGER.debug("Request is: " + request.toString());
 
         if (!validator.isValid(request, responseObserver)) {
@@ -257,10 +264,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
 
-        Mapper<Video> mapper = manager.mapper(Video.class);
-
         // videoId matches the partition key set in the Video class
-        Video video = mapper.get(videoId);
+        Video video = videoMapper.get(videoId);
         LOGGER.debug("Video name is: " + video.getName());
 
 //        videoManager
@@ -293,11 +298,10 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Override
     public void getVideoPreviews(GetVideoPreviewsRequest request, StreamObserver<GetVideoPreviewsResponse> responseObserver) {
 
-        LOGGER.debug("Start getting video preview");
-
-        Mapper<Video> mapper = manager.mapper(Video.class);
+        LOGGER.debug("-----Start getting video preview-----");
 
         if (!validator.isValid(request, responseObserver)) {
+            LOGGER.debug("Video request IS VALID");
             return;
         }
 
@@ -321,15 +325,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 .map(uuid -> UUID.fromString(uuid.getValue()))
                 .map(uuid -> videoManager.crud().findById(uuid).getAsync())
                 .collect(toList()); */
-
-        final List<ListenableFuture<Video>> listFuture = request
-                .getVideoIdsList()
-                .stream()
-                .map(uuid -> UUID.fromString(uuid.getValue()))
-                .map(uuid -> mapper.getAsync(uuid))
-                .collect(toList());
-
-        LOGGER.debug("List size is: " + listFuture.size());
 
         /**
          * Merge all the async SELECT results
@@ -357,6 +352,52 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //                    }
 //                    return list;
 //                });
+
+        LOGGER.debug("videoIdsList is: " + request.getVideoIdsList().toString());
+
+        final List<ListenableFuture<Video>> listFuture = request
+                .getVideoIdsList()
+                .stream()
+                .map(uuid -> UUID.fromString(uuid.getValue()))
+                .map(uuid -> videoMapper.getAsync(uuid))
+                .collect(toList());
+
+//        BuiltStatement bs = QueryBuilder
+//                .select().all()
+//                .from(Schema.KEYSPACE,"users")
+//                .where(QueryBuilder.in("userid",userIds));
+//
+//        ResultSetFuture future = manager.getSession().executeAsync(bs);
+
+        /*BuiltStatement bs = QueryBuilder
+                .select().all()
+                .from(Schema.KEYSPACE,"users")
+                .where(QueryBuilder.in("userid",userIds));
+
+        ResultSetFuture future = manager.getSession().executeAsync(bs);*/
+
+//        Futures.addCallback(listFuture,
+//                new FutureCallback<ResultSet>() {
+//                    @Override
+//                    public void onSuccess(@Nullable ResultSet result) {
+//                        Result<Video> videos = videoMapper.map(result);
+//                        videos.forEach(video -> builder.addVideoPreviews(video.toVideoPreview()));
+//
+//                        responseObserver.onNext(builder.build());
+//                        responseObserver.onCompleted();
+//
+//                        LOGGER.debug("End getting user profile");
+//                    }
+//
+//                    @Override
+//                    public void onFailure(Throwable t) {
+//                        LOGGER.error("Exception getting user profile : " + mergeStackTrace(t));
+//
+//                        responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
+//                    }
+//                }
+//                //MoreExecutors.sameThreadExecutor()
+//        );
     }
 
     /**
@@ -395,51 +436,62 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Override
     public void getLatestVideoPreviews(GetLatestVideoPreviewsRequest request, StreamObserver<GetLatestVideoPreviewsResponse> responseObserver) {
 
-        LOGGER.debug("Start getting latest video preview");
+        LOGGER.debug("-----Start getting latest video preview-----");
 
-        //:TODO Fix this
+        if (!validator.isValid(request, responseObserver)) {
+            LOGGER.debug("Video request IS NOT VALID");
+            return;
+        }
 
-//        if (!validator.isValid(request, responseObserver)) {
-//            return;
-//        }
-//
 //        final Tuple3<List<String>, Integer, String> tuple3 = parseCustomPagingState(Optional.ofNullable(request.getPagingState()))
 //                .orElseGet(this.buildFirstCustomPagingState());
-//
-//        List<String> buckets = tuple3._1();
-//        int bucketIndex = tuple3._2();
-//        String rowPagingState = tuple3._3();
-//
-//
-//        final Optional<Date> startingAddedDate = Optional
-//                .ofNullable(request.getStartingAddedDate())
-//                .filter(x -> StringUtils.isNotBlank(x.toString()))
-//                .map(x -> Instant.ofEpochSecond(x.getSeconds(), x.getNanos()))
-//                .map(Date::from);
-//
-//        final Optional<UUID> startingVideoId = Optional
-//                .ofNullable(request.getStartingVideoId())
-//                .filter(x -> StringUtils.isNotBlank(x.toString()))
-//                .map(x -> x.getValue())
-//                .filter(StringUtils::isNotBlank)
-//                .map(UUID::fromString);
-//
-//        final List<VideoPreview> results = new ArrayList<>();
-//        String nextPageState = "";
-//
-//        /**
-//         * Boolean to know if the native Cassandra paging
-//         * state has been used
-//         */
-//        final AtomicBoolean cassandraPagingStateUsed = new AtomicBoolean(false);
-//
-//        try {
-//
+        final TupleValue tuple3 = parseCustomPagingState(Optional.ofNullable(request.getPagingState()))
+                .orElseGet(this.buildFirstCustomPagingState());
+
+        LOGGER.debug("Paging state is: " + request.getPagingState());
+
+        List<String> buckets = tuple3.getList(0, new TypeToken<String>() {});
+        int bucketIndex = tuple3.getInt(1);
+        String rowPagingState = tuple3.getString(2);
+
+
+        final Optional<Date> startingAddedDate = Optional
+                .ofNullable(request.getStartingAddedDate())
+                .filter(x -> StringUtils.isNotBlank(x.toString()))
+                .map(x -> Instant.ofEpochSecond(x.getSeconds(), x.getNanos()))
+                .map(Date::from);
+
+        final Optional<UUID> startingVideoId = Optional
+                .ofNullable(request.getStartingVideoId())
+                .filter(x -> StringUtils.isNotBlank(x.toString()))
+                .map(x -> x.getValue())
+                .filter(StringUtils::isNotBlank)
+                .map(UUID::fromString);
+
+        final List<VideoPreview> results = new ArrayList<>();
+        String nextPageState = "";
+
+
+        LOGGER.debug("BLOCK BLOCK BLOCK");
+
+        /**
+         * Boolean to know if the native Cassandra paging
+         * state has been used
+         */
+        final AtomicBoolean cassandraPagingStateUsed = new AtomicBoolean(false);
+
+        try {
+
 //            while (bucketIndex < buckets.size()) {
 //
 //                int recordsStillNeeded = request.getPageSize() - results.size();
 //                final String yyyyMMdd = buckets.get(bucketIndex);
-//                final Tuple2<List<LatestVideos>, ExecutionInfo> resultWithPagingState;
+//                //final Tuple2<List<LatestVideos>, ExecutionInfo> resultWithPagingState;
+//                TupleType resultWithPagingState = manager.getSession().getCluster().getMetadata()
+//                        .newTupleType(
+//                                DataType.list(DataType.custom("killrvideo.entity.LatestVideos")),
+//                                DataType.list(DataType.custom("ExecutionInfo"))
+//                        );
 //
 //                final Optional<String> pagingStateString =
 //                        Optional.ofNullable(rowPagingState)
@@ -498,28 +550,28 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //
 //                bucketIndex++;
 //            }
-//            responseObserver.onNext(GetLatestVideoPreviewsResponse
-//                    .newBuilder()
-//                    .addAllVideoPreviews(results)
-//                    .setPagingState(nextPageState).build());
-//            responseObserver.onCompleted();
-//
-//        } catch (Throwable throwable) {
-//
-//            LOGGER.error("Exception when getting latest preview videos : " + mergeStackTrace(throwable));
-//
-//            responseObserver.onError(Status.INTERNAL.withCause(throwable).asRuntimeException());
-//        }
-//
-//
-//        LOGGER.debug("End getting latest video preview");
+            responseObserver.onNext(GetLatestVideoPreviewsResponse
+                    .newBuilder()
+                    .addAllVideoPreviews(results)
+                    .setPagingState(nextPageState).build());
+            responseObserver.onCompleted();
+
+        } catch (Throwable throwable) {
+
+            LOGGER.error("Exception when getting latest preview videos : " + mergeStackTrace(throwable));
+
+            responseObserver.onError(Status.INTERNAL.withCause(throwable).asRuntimeException());
+        }
+
+
+        LOGGER.debug("End getting latest video preview");
     }
 
 
     @Override
     public void getUserVideoPreviews(GetUserVideoPreviewsRequest request, StreamObserver<GetUserVideoPreviewsResponse> responseObserver) {
 
-        LOGGER.debug("Start getting user video preview");
+        LOGGER.debug("-----Start getting user video preview-----");
 
         //:TODO Fix this
 
@@ -600,33 +652,36 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         return joiner.toString() + "," + bucketIndex + "," + rowsPagingState;
     }
 
-    //:TODO Fix this
-//
-//    private Optional<Tuple3<List<String>, Integer, String>> parseCustomPagingState(Optional<String> customPagingState) {
-//        return customPagingState
-//                .map(pagingState -> {
-//                    Matcher matcher = PARSE_LATEST_PAGING_STATE.matcher(pagingState);
-//                    if (matcher.matches()) {
-//                        final List<String> buckets = Lists.newArrayList(matcher.group(1).split("_"));
-//                        final int currentBucket = Integer.parseInt(matcher.group(2));
-//                        final String cassandraPagingState = matcher.group(3);
-//                        return Tuple3.of(buckets, currentBucket, cassandraPagingState);
-//                    } else {
-//                        return null;
-//                    }
-//                });
-//    }
+    private Optional<TupleValue> parseCustomPagingState(Optional<String> customPagingState) {
+        return customPagingState
+                .map(pagingState -> {
+                    Matcher matcher = PARSE_LATEST_PAGING_STATE.matcher(pagingState);
+                    if (matcher.matches()) {
+                        final List<String> buckets = Lists.newArrayList(matcher.group(1).split("_"));
+                        final int currentBucket = Integer.parseInt(matcher.group(2));
+                        final String cassandraPagingState = matcher.group(3);
+                        TupleType tuple3 = manager.getSession().getCluster().getMetadata()
+                                .newTupleType(DataType.list(DataType.varchar()), DataType.cint(), DataType.varchar());
+                        return tuple3.newValue(buckets, currentBucket, cassandraPagingState);
+                    } else {
+                        return null;
+                    }
+                });
+    }
 
-    //:TODO Fix this
 //    private Supplier<Tuple3<List<String>, Integer, String>> buildFirstCustomPagingState() {
-//        return () -> {
-//            final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
-//            final ZonedDateTime now = Instant.now().atZone(ZoneId.systemDefault());
-//            final List<String> buckets = LongStream.rangeClosed(0L, 7L).boxed()
-//                    .map(now::minusDays)
-//                    .map(x -> x.format(formatter))
-//                    .collect(Collectors.toList());
-//            return Tuple3.of(buckets, 0, null);
-//        };
-//    }
+    private Supplier<TupleValue> buildFirstCustomPagingState() {
+        return () -> {
+            final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+            final ZonedDateTime now = Instant.now().atZone(ZoneId.systemDefault());
+            final List<String> buckets = LongStream.rangeClosed(0L, 7L).boxed()
+                    .map(now::minusDays)
+                    .map(x -> x.format(formatter))
+                    .collect(Collectors.toList());
+            TupleType tuple3 = manager.getSession().getCluster().getMetadata()
+                    .newTupleType(DataType.list(DataType.varchar()), DataType.cint(), DataType.varchar());
+            return tuple3.newValue(buckets, 0, null);
+            //return Tuple3.of(buckets, 0, null);
+        };
+    }
 }
