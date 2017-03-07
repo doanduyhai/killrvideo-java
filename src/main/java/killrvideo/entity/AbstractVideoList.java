@@ -10,11 +10,11 @@ import com.datastax.driver.mapping.annotations.ClusteringColumn;
 
 public class AbstractVideoList extends AbstractVideo {
 
-    @ClusteringColumn(1)
+    @ClusteringColumn()
     @Column(name = "added_date")
     protected Date addedDate;
 
-    @ClusteringColumn(2)
+    @ClusteringColumn(1)
     protected UUID videoid;
 
     public Date getAddedDate() {

@@ -15,6 +15,9 @@ import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
+import com.xqbase.etcd4j.EtcdClient;
+import killrvideo.configuration.EtcdConfiguration;
+import killrvideo.grpc.GrpcServer;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -45,21 +48,26 @@ import killrvideo.user_management.events.UserManagementEvents.UserCreated;
 import killrvideo.utils.HashUtils;
 import killrvideo.utils.TypeConverter;
 import killrvideo.validation.KillrVideoInputValidator;
+import killrvideo.configuration.CassandraConfiguration;
+import killrvideo.configuration.EtcdConfiguration.*;
 
 import javax.inject.Inject;
 
 @RunWith(MockitoJUnitRunner.class)
 public class UserManagementServiceTest {
 
-//    @Inject
-//    MappingManager manager;
-//
-//    @Inject
-//    Mapper<UserCredentials> userCredentialsMapper;
-//
-//    @Inject
-//    Mapper<User> userMapper;
-//
+    @Inject
+    MappingManager manager;
+
+    @Inject
+    Mapper<UserCredentials> userCredentialsMapper;
+
+    @Inject
+    Mapper<User> userMapper;
+
+    @Inject
+    EtcdClient etcdClient;
+
 //    @Rule
 //    public AchillesTestResource<ManagerFactory> resource =  AchillesTestResourceBuilder
 //            .forJunit()
@@ -74,81 +82,86 @@ public class UserManagementServiceTest {
 //                    .withPostLoadBeanValidation(true)
 //                    .build()
 //            );
-//
-//    private UserManagementService userManagementService;
-//    final private ScriptExecutor scriptExecutor = new ScriptExecutor(manager.getSession());
-//
-//    @Mock
-//    EventBus eventBus;
-//
-//    @Captor
-//    ArgumentCaptor<UserCreated> captor = ArgumentCaptor.forClass(UserCreated.class);
-//
-//    @Before
-//    public void setUp() {
-//        userManagementService = new UserManagementService();
-//        //userManagementService.userManager = resource.getManagerFactory().forUser();
-//        //userManagementService.userCredentialsManager = resource.getManagerFactory().forUserCredentials();
-//        userManagementService.manager = manager;
-//        userManagementService.userMapper = userMapper;
-//        userManagementService.userCredentialsMapper = userCredentialsMapper;
-//        userManagementService.validator = new KillrVideoInputValidator();
-//        userManagementService.eventBus = eventBus;
-//    }
-//
-//    @Test
-//    public void should_create_user() throws Exception {
-//        //Given
-//        UUID userId = UUID.randomUUID();
-//
-//        CreateUserRequest request = CreateUserRequest.newBuilder()
-//                .setEmail("test@gmail.com")
-//                .setFirstName("John")
-//                .setLastName("DOE")
-//                .setUserId(TypeConverter.uuidToUuid(userId))
-//                .setPassword("password")
-//                .build();
-//
-//        final CountDownLatch latch = new CountDownLatch(1);
-//        final AtomicBoolean completed = new AtomicBoolean(false);
-//        final AtomicReference<CreateUserResponse> response = new AtomicReference<>(null);
-//
-//        StreamObserver<CreateUserResponse> streamObserver = new StreamObserver<CreateUserResponse>() {
-//            @Override
-//            public void onNext(CreateUserResponse value) {
-//                response.getAndSet(value);
-//            }
-//
-//            @Override
-//            public void onError(Throwable t) {
-//            }
-//
-//            @Override
-//            public void onCompleted() {
-//                latch.countDown();
-//                completed.getAndSet(true);
-//            }
-//        };
-//        //When
-//        userManagementService.createUser(request, streamObserver);
-//        latch.await();
-//
-//        //Then
-//        assertThat(completed.get()).isTrue();
-//        final CreateUserResponse createUserResponse = response.get();
-//        assertThat(createUserResponse).isNotNull();
-//
-//        verify(eventBus).post(captor.capture());
-//
-//        final UserCreated userCreated = captor.getValue();
-//        assertThat(userCreated).isNotNull();
-//
-//        assertThat(userCreated.getUserId().getValue()).isEqualTo(userId.toString());
-//        assertThat(userCreated.getFirstName()).isEqualTo("John");
-//        assertThat(userCreated.getLastName()).isEqualTo("DOE");
-//        assertThat(userCreated.getEmail()).isEqualTo("test@gmail.com");
-//        assertThat(userCreated.getTimestamp()).isNotNull();
-//    }
+
+    private UserManagementService userManagementService;
+    //final private ScriptExecutor scriptExecutor = new ScriptExecutor(manager.getSession());
+
+    @Mock
+    EventBus eventBus;
+
+    @Captor
+    ArgumentCaptor<UserCreated> captor = ArgumentCaptor.forClass(UserCreated.class);
+
+    @Before
+    public void setUp() {
+        EtcdConfiguration etcdConfig = new EtcdConfiguration();
+        EtcdClient etcdClient = etcdConfig.connectToEtcd();
+        CassandraConfiguration config = new CassandraConfiguration();
+        MappingManager manager = config.cassandraNativeClusterProduction();
+
+        userManagementService = new UserManagementService();
+        //userManagementService.userManager = resource.getManagerFactory().forUser();
+        //userManagementService.userCredentialsManager = resource.getManagerFactory().forUserCredentials();
+        userManagementService.manager = manager;
+        userManagementService.userMapper = userMapper;
+        userManagementService.userCredentialsMapper = userCredentialsMapper;
+        userManagementService.validator = new KillrVideoInputValidator();
+        userManagementService.eventBus = eventBus;
+    }
+
+    @Test
+    public void should_create_user() throws Exception {
+        //Given
+        UUID userId = UUID.randomUUID();
+
+        CreateUserRequest request = CreateUserRequest.newBuilder()
+                .setEmail("test@gmail.com")
+                .setFirstName("John")
+                .setLastName("DOE")
+                .setUserId(TypeConverter.uuidToUuid(userId))
+                .setPassword("password")
+                .build();
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicBoolean completed = new AtomicBoolean(false);
+        final AtomicReference<CreateUserResponse> response = new AtomicReference<>(null);
+
+        StreamObserver<CreateUserResponse> streamObserver = new StreamObserver<CreateUserResponse>() {
+            @Override
+            public void onNext(CreateUserResponse value) {
+                response.getAndSet(value);
+            }
+
+            @Override
+            public void onError(Throwable t) {
+            }
+
+            @Override
+            public void onCompleted() {
+                latch.countDown();
+                completed.getAndSet(true);
+            }
+        };
+        //When
+        userManagementService.createUser(request, streamObserver);
+        latch.await();
+
+        //Then
+        assertThat(completed.get()).isTrue();
+        final CreateUserResponse createUserResponse = response.get();
+        assertThat(createUserResponse).isNotNull();
+
+        verify(eventBus).post(captor.capture());
+
+        final UserCreated userCreated = captor.getValue();
+        assertThat(userCreated).isNotNull();
+
+        assertThat(userCreated.getUserId().getValue()).isEqualTo(userId.toString());
+        assertThat(userCreated.getFirstName()).isEqualTo("John");
+        assertThat(userCreated.getLastName()).isEqualTo("DOE");
+        assertThat(userCreated.getEmail()).isEqualTo("test@gmail.com");
+        assertThat(userCreated.getTimestamp()).isNotNull();
+    }
 //
 //    @Test
 //    public void should_fail_creating_existing_user() throws Exception {

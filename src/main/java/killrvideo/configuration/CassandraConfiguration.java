@@ -43,6 +43,7 @@ public class CassandraConfiguration {
     public MappingManager cassandraNativeClusterProduction() {
 
         LOGGER.info("Initializing connection to Cassandra");
+        LOGGER.info("ETCD Client is: " + etcdClient.toString());
 
         try {
 

@@ -4,11 +4,8 @@ import java.util.Date;
 import java.util.Optional;
 import java.util.UUID;
 
-//import info.archinnov.achilles.annotations.ClusteringColumn;
-//import info.archinnov.achilles.annotations.Column;
-//import info.archinnov.achilles.annotations.PartitionKey;
-//import info.archinnov.achilles.annotations.Table;
-
+import com.datastax.driver.mapping.annotations.ClusteringColumn;
+import com.datastax.driver.mapping.annotations.Column;
 import com.datastax.driver.mapping.annotations.PartitionKey;
 import com.datastax.driver.mapping.annotations.Table;
 
@@ -21,7 +18,6 @@ public class UserVideos extends AbstractVideoList {
 
     @PartitionKey
     private UUID userid;
-
 
     public UserVideos() {
     }
@@ -45,9 +41,7 @@ public class UserVideos extends AbstractVideoList {
         return userid;
     }
 
-    public void setUserid(UUID userid) {
-        this.userid = userid;
-    }
+    public void setUserid(UUID userid) { this.userid = userid; }
 
     public VideoPreview toVideoPreview() {
         return VideoPreview.newBuilder()

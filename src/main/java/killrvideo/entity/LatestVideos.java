@@ -17,7 +17,7 @@ import killrvideo.video_catalog.VideoCatalogServiceOuterClass;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 
 @Table(keyspace = Schema.KEYSPACE, name = "latest_videos")
-public class LatestVideos extends AbstractVideoList{
+public class LatestVideos extends AbstractVideoList {
 
     @PartitionKey
     private String yyyymmdd;

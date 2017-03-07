@@ -3,6 +3,7 @@ package killrvideo.service;
 //import static info.archinnov.achilles.internals.futures.FutureUtils.toCompletableFuture;
 import static java.util.stream.Collectors.toList;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
+import static com.datastax.driver.mapping.Mapper.Option.*;
 
 import java.text.SimpleDateFormat;
 import java.time.Instant;
@@ -33,6 +34,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import info.archinnov.achilles.type.tuples.Tuple;
 import killrvideo.entity.*;
+import killrvideo.utils.FutureUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,6 +88,12 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     */
     @Inject
     Mapper<Video> videoMapper;
+
+    @Inject
+    Mapper<UserVideos> userVideosMapper;
+
+    @Inject
+    Mapper<LatestVideos> latestVideosMapper;
 
     @Inject
     MappingManager manager;
@@ -178,78 +186,90 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         LOGGER.debug("-----Start submitting youtube video-----");
 
-        //:TODO Fix this
-//        if (!validator.isValid(request, responseObserver)) {
-//            return;
-//        }
-//
-//        final Date now = new Date();
-//        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
-//        final String yyyyMMdd = dateFormat.format(now);
-//        final String location = request.getYouTubeVideoId();
-//        final String previewImageLocation = "//img.youtube.com/vi/"+ location + "/hqdefault.jpg";
-//        final UUID videoId = UUID.fromString(request.getVideoId().getValue());
-//        final UUID userId = UUID.fromString(request.getUserId().getValue());
-//
-//        final BoundStatement bs1 = videoManager
-//                .crud()
-//                .insert(new Video(videoId, userId, request.getName(), request.getDescription(), location,
-//                        VideoLocationType.YOUTUBE.ordinal(), previewImageLocation, Sets.newHashSet(request.getTagsList().iterator()), now))
-//                .generateAndGetBoundStatement();
-//
-//        final BoundStatement bs2 = userVideosManager
-//                .crud()
-//                .insert(new UserVideos(userId, videoId, request.getName(), previewImageLocation, now))
-//                .generateAndGetBoundStatement();
-//
-//        final BoundStatement bs3 = latestVideosManager
-//                .crud()
-//                .insert(new LatestVideos(yyyyMMdd, userId, videoId, request.getName(), previewImageLocation, now))
-//                .usingTimeToLive(LATEST_VIDEOS_TTL_SECONDS)
-//                .generateAndGetBoundStatement();
-//
-//        /**
-//         * Logged batch insert for automatic retry
-//         */
-//        final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
-//        batchStatement.add(bs1);
-//        batchStatement.add(bs2);
-//        batchStatement.add(bs3);
-//        batchStatement.setDefaultTimestamp(now.getTime());
-//
-//        toCompletableFuture(session.executeAsync(batchStatement), executorService)
-//                .handle((rs, ex) -> {
-//                    if (rs != null) {
-//                        /**
-//                         * See class {@link VideoAddedHandlers} for the impl
-//                         */
-//                        final YouTubeVideoAdded.Builder youTubeVideoAdded = YouTubeVideoAdded.newBuilder()
-//                                .setAddedDate(TypeConverter.dateToTimestamp(now))
-//                                .setDescription(request.getDescription())
-//                                .setLocation(location)
-//                                .setName(request.getName())
-//                                .setPreviewImageLocation(previewImageLocation)
-//                                .setTimestamp(TypeConverter.dateToTimestamp(now))
-//                                .setUserId(request.getUserId())
-//                                .setVideoId(request.getVideoId());
-//                        youTubeVideoAdded.addAllTags(Sets.newHashSet(request.getTagsList()));
-//                        eventBus.post(youTubeVideoAdded.build());
-//
-//                        responseObserver.onNext(SubmitYouTubeVideoResponse.newBuilder().build());
-//                        responseObserver.onCompleted();
-//
-//                        LOGGER.debug("End submitting youtube video");
-//
-//                    } else if (ex != null) {
-//
-//                        LOGGER.error("Exception submitting youtube video : " + mergeStackTrace(ex));
-//
-//                        eventBus.post(new CassandraMutationError(request, ex));
-//                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-//
-//                    }
-//                    return rs;
-//                });
+        if (!validator.isValid(request, responseObserver)) {
+            return;
+        }
+
+        final Date now = new Date();
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+        final String yyyyMMdd = dateFormat.format(now);
+        final String location = request.getYouTubeVideoId();
+        final String previewImageLocation = "//img.youtube.com/vi/"+ location + "/hqdefault.jpg";
+        final UUID videoId = UUID.fromString(request.getVideoId().getValue());
+        final UUID userId = UUID.fromString(request.getUserId().getValue());
+
+        /*final BoundStatement bs1 = videoManager
+                .crud()
+                .insert(new Video(videoId, userId, request.getName(), request.getDescription(), location,
+                        VideoLocationType.YOUTUBE.ordinal(), previewImageLocation, Sets.newHashSet(request.getTagsList().iterator()), now))
+                .generateAndGetBoundStatement();
+
+        final BoundStatement bs2 = userVideosManager
+                .crud()
+                .insert(new UserVideos(userId, videoId, request.getName(), previewImageLocation, now))
+                .generateAndGetBoundStatement();
+
+        final BoundStatement bs3 = latestVideosManager
+                .crud()
+                .insert(new LatestVideos(yyyyMMdd, userId, videoId, request.getName(), previewImageLocation, now))
+                .usingTimeToLive(LATEST_VIDEOS_TTL_SECONDS)
+                .generateAndGetBoundStatement();*/
+
+        final Statement bs1 = videoMapper
+                .saveQuery(new Video(videoId, userId, request.getName(), request.getDescription(), location,
+                        VideoLocationType.YOUTUBE.ordinal(), previewImageLocation, Sets.newHashSet(request.getTagsList().iterator()), now));
+
+        final Statement bs2 = userVideosMapper
+                .saveQuery(new UserVideos(userId, videoId, request.getName(), previewImageLocation, now));
+
+        final Statement bs3 = latestVideosMapper
+                .saveQuery(new LatestVideos(yyyyMMdd, userId, videoId, request.getName(), previewImageLocation, now)
+                        ,ttl(LATEST_VIDEOS_TTL_SECONDS));
+
+        /**
+         * Logged batch insert for automatic retry
+         */
+        final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
+        batchStatement.add(bs1);
+        batchStatement.add(bs2);
+        batchStatement.add(bs3);
+        batchStatement.setDefaultTimestamp(now.getTime());
+
+        ResultSetFuture batchResultsFuture = manager.getSession().executeAsync(batchStatement);
+        FutureUtils.buildCompletableFuture(batchResultsFuture)
+        //toCompletableFuture(session.executeAsync(batchStatement), executorService)
+                .handle((rs, ex) -> {
+                    if (rs != null) {
+                        /**
+                         * See class {@link VideoAddedHandlers} for the impl
+                         */
+                        final YouTubeVideoAdded.Builder youTubeVideoAdded = YouTubeVideoAdded.newBuilder()
+                                .setAddedDate(TypeConverter.dateToTimestamp(now))
+                                .setDescription(request.getDescription())
+                                .setLocation(location)
+                                .setName(request.getName())
+                                .setPreviewImageLocation(previewImageLocation)
+                                .setTimestamp(TypeConverter.dateToTimestamp(now))
+                                .setUserId(request.getUserId())
+                                .setVideoId(request.getVideoId());
+                        youTubeVideoAdded.addAllTags(Sets.newHashSet(request.getTagsList()));
+                        eventBus.post(youTubeVideoAdded.build());
+
+                        responseObserver.onNext(SubmitYouTubeVideoResponse.newBuilder().build());
+                        responseObserver.onCompleted();
+
+                        LOGGER.debug("End submitting youtube video");
+
+                    } else if (ex != null) {
+
+                        LOGGER.error("Exception submitting youtube video : " + mergeStackTrace(ex));
+
+                        eventBus.post(new CassandraMutationError(request, ex));
+                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
+                    }
+                    return rs;
+                });
     }
 
     @Override
@@ -265,34 +285,32 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
 
         // videoId matches the partition key set in the Video class
-        Video video = videoMapper.get(videoId);
-        LOGGER.debug("Video name is: " + video.getName());
+        Statement videoQuery = videoMapper.getQuery(videoId);
+        ResultSetFuture resultsFuture = manager.getSession().executeAsync(videoQuery);
+        FutureUtils.buildCompletableFuture(resultsFuture)
+                .handle((entity, ex) -> {
+                    if (entity != null) {
+                        //:TODO Have no idea if I can cast the reponse this way, check this later after more is hooked up
+                        LOGGER.debug("Video is: " + ((Video) entity).getName());
+                        responseObserver.onNext(((Video) entity).toVideoResponse());
+                        responseObserver.onCompleted();
 
-//        videoManager
-//                .crud()
-//                .findById(videoId)
-//                .getAsync()
-//                .handle((entity,ex) -> {
-//                    if (entity != null) {
-//                        responseObserver.onNext(entity.toVideoResponse());
-//                        responseObserver.onCompleted();
-//
-//                        LOGGER.debug("End getting video");
-//
-//                    } else if (entity == null) {
-//
-//                        LOGGER.warn("Video with id " + videoId + " was not found");
-//
-//                        responseObserver.onError(Status.NOT_FOUND
-//                                .withDescription("Video with id " + videoId + " was not found").asRuntimeException());
-//                    } else if (ex != null) {
-//
-//                        LOGGER.error("Exception getting video : " + mergeStackTrace(ex));
-//
-//                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-//                    }
-//                    return entity;
-//                });
+                        LOGGER.debug("End getting video");
+
+                    } else if (entity == null) {
+
+                        LOGGER.warn("Video with id " + videoId + " was not found");
+
+                        responseObserver.onError(Status.NOT_FOUND
+                                .withDescription("Video with id " + videoId + " was not found").asRuntimeException());
+                    } else if (ex != null) {
+
+                        LOGGER.error("Exception getting video : " + mergeStackTrace(ex));
+
+                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+                    }
+                    return entity;
+                });
     }
 
     @Override
