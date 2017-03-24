@@ -1,6 +1,7 @@
 package killrvideo.service;
 
 //import static info.archinnov.achilles.internals.futures.FutureUtils.toCompletableFuture;
+import static java.util.UUID.fromString;
 import static java.util.stream.Collectors.toList;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 import static com.datastax.driver.mapping.Mapper.Option.*;
@@ -32,6 +33,7 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.sun.org.apache.bcel.internal.generic.LOOKUPSWITCH;
 import info.archinnov.achilles.type.tuples.Tuple;
 import killrvideo.entity.*;
 import killrvideo.utils.FutureUtils;
@@ -215,14 +217,14 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 .usingTimeToLive(LATEST_VIDEOS_TTL_SECONDS)
                 .generateAndGetBoundStatement();*/
 
-        final Statement bs1 = videoMapper
+        final Statement s1 = videoMapper
                 .saveQuery(new Video(videoId, userId, request.getName(), request.getDescription(), location,
                         VideoLocationType.YOUTUBE.ordinal(), previewImageLocation, Sets.newHashSet(request.getTagsList().iterator()), now));
 
-        final Statement bs2 = userVideosMapper
+        final Statement s2 = userVideosMapper
                 .saveQuery(new UserVideos(userId, videoId, request.getName(), previewImageLocation, now));
 
-        final Statement bs3 = latestVideosMapper
+        final Statement s3 = latestVideosMapper
                 .saveQuery(new LatestVideos(yyyyMMdd, userId, videoId, request.getName(), previewImageLocation, now)
                         ,ttl(LATEST_VIDEOS_TTL_SECONDS));
 
@@ -230,9 +232,9 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
          * Logged batch insert for automatic retry
          */
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
-        batchStatement.add(bs1);
-        batchStatement.add(bs2);
-        batchStatement.add(bs3);
+        batchStatement.add(s1);
+        batchStatement.add(s2);
+        batchStatement.add(s3);
         batchStatement.setDefaultTimestamp(now.getTime());
 
         ResultSetFuture batchResultsFuture = manager.getSession().executeAsync(batchStatement);
@@ -290,24 +292,21 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         FutureUtils.buildCompletableFuture(resultsFuture)
                 .handle((entity, ex) -> {
                     if (entity != null) {
-                        //:TODO Have no idea if I can cast the reponse this way, check this later after more is hooked up
+                        //:TODO Have no idea if I can cast the response this way, check this later after more is hooked up
                         LOGGER.debug("Video is: " + ((Video) entity).getName());
                         responseObserver.onNext(((Video) entity).toVideoResponse());
                         responseObserver.onCompleted();
-
                         LOGGER.debug("End getting video");
 
                     } else if (entity == null) {
-
                         LOGGER.warn("Video with id " + videoId + " was not found");
-
                         responseObserver.onError(Status.NOT_FOUND
                                 .withDescription("Video with id " + videoId + " was not found").asRuntimeException());
+
                     } else if (ex != null) {
-
                         LOGGER.error("Exception getting video : " + mergeStackTrace(ex));
-
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
                     }
                     return entity;
                 });
@@ -471,7 +470,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         List<String> buckets = tuple3.getList(0, new TypeToken<String>() {});
         int bucketIndex = tuple3.getInt(1);
         String rowPagingState = tuple3.getString(2);
-
+        LOGGER.debug("Tuple is: buckets: " + buckets.size() + " index: " + bucketIndex + " state: " + rowPagingState);
 
         final Optional<Date> startingAddedDate = Optional
                 .ofNullable(request.getStartingAddedDate())
@@ -499,28 +498,31 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final AtomicBoolean cassandraPagingStateUsed = new AtomicBoolean(false);
 
         try {
+            while (bucketIndex < buckets.size()) {
 
-//            while (bucketIndex < buckets.size()) {
-//
-//                int recordsStillNeeded = request.getPageSize() - results.size();
-//                final String yyyyMMdd = buckets.get(bucketIndex);
-//                //final Tuple2<List<LatestVideos>, ExecutionInfo> resultWithPagingState;
-//                TupleType resultWithPagingState = manager.getSession().getCluster().getMetadata()
-//                        .newTupleType(
-//                                DataType.list(DataType.custom("killrvideo.entity.LatestVideos")),
-//                                DataType.list(DataType.custom("ExecutionInfo"))
-//                        );
-//
-//                final Optional<String> pagingStateString =
-//                        Optional.ofNullable(rowPagingState)
-//                                .filter(StringUtils::isNotBlank)
-//                                .filter(pg -> !cassandraPagingStateUsed.get());
-//
-//                /**
-//                 * If startingAddedDate and startingVideoId are provided,
-//                 * we do NOT use the paging state
-//                 */
-//                if (startingAddedDate.isPresent() && startingVideoId.isPresent()) {
+                int recordsStillNeeded = request.getPageSize() - results.size();
+                final String yyyyMMdd = buckets.get(bucketIndex);
+                //final Tuple2<List<LatestVideos>, ExecutionInfo> resultWithPagingState;
+                TupleType resultWithPagingState = manager.getSession().getCluster().getMetadata()
+                        .newTupleType(
+                                DataType.list(DataType.custom("killrvideo.entity.LatestVideos")),
+                                DataType.list(DataType.custom("ExecutionInfo"))
+                        );
+
+                final Optional<String> pagingStateString =
+                        Optional.ofNullable(rowPagingState)
+                                .filter(StringUtils::isNotBlank)
+                                .filter(pg -> !cassandraPagingStateUsed.get());
+
+                BuiltStatement statement;
+                ResultSetFuture future = null;
+                ResultSet resultsTest = null;
+
+                /**
+                 * If startingAddedDate and startingVideoId are provided,
+                 * we do NOT use the paging state
+                 */
+                if (startingAddedDate.isPresent() && startingVideoId.isPresent()) {
 //                    resultWithPagingState = latestVideosManager
 //                            .dsl()
 //                            .select()
@@ -530,8 +532,23 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //                            .addedDate_And_videoid().Lte(startingAddedDate.get(), startingVideoId.get())
 //                            .withFetchSize(recordsStillNeeded)
 //                            .getListWithStats();
-//                } else {
-//
+
+                    statement = QueryBuilder
+                            .select().all()
+                            .from(Schema.KEYSPACE, latestVideosMapper.getTableMetadata().getName())
+                            .where(QueryBuilder.eq("yyyymmdd", yyyyMMdd))
+                            //.and(QueryBuilder.lte("videoid", startingVideoId.get()))
+                            .and(QueryBuilder.lte("added_date", startingAddedDate.get()));
+
+                    statement
+                            .setFetchSize(recordsStillNeeded);
+
+                    future = manager.getSession().executeAsync(statement);
+                    resultsTest = future.getUninterruptibly();
+
+                    //resultWithPagingStateValue = resultWithPagingState.newValue(manager.getSession().executeAsync(statement));
+
+                } else {
 //                    resultWithPagingState = latestVideosManager
 //                            .dsl()
 //                            .select()
@@ -542,37 +559,97 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //                            .withOptionalPagingStateString(pagingStateString)
 //                            .getListWithStats();
 //                    cassandraPagingStateUsed.compareAndSet(false, true);
-//                }
+
+                    statement = QueryBuilder
+                            .select().all()
+                            .from(Schema.KEYSPACE, latestVideosMapper.getTableMetadata().getName())
+                            .where(QueryBuilder.eq("yyyymmdd", yyyyMMdd));
+
+                    statement
+                            .setFetchSize(recordsStillNeeded);
+
+                    //:TODO Figure out the proper way to do this with Optional and java 8 lambada
+                    if (pagingStateString.isPresent()) {
+                        statement.setPagingState(PagingState.fromString(pagingStateString.get()));
+                    }
+
+                    future = manager.getSession().executeAsync(statement);
+                    resultsTest = future.getUninterruptibly();
+                    cassandraPagingStateUsed.compareAndSet(false, true);
+                }
+
+
+//                FutureUtils.buildCompletableFuture(future)
+//                        .handle((result, ex) -> {
+//                            //final TupleValue resultWithPagingStateValue = resultWithPagingState.newValue(null, null);
 //
+//                            if (result != null && !result.isExhausted()) {
+//                                List<Row> rows = result.all();
+//                                //resultWithPagingStateValue.setList(0, rows);
+//                                //resultWithPagingStateValue.setList(1, result.getAllExecutionInfo());
+//                                //cassandraPagingStateUsed.compareAndSet(false, true);
+//
+//
+//                                results.addAll(resultWithPagingState.newValue(result.all(), result.getExecutionInfo())
+//                                        .get(0, TypeTokens.listOf(LatestVideos.class))
+//                                        .stream()
+//                                        .map(LatestVideos::toVideoPreview)
+//                                        .collect(toList()));
+//
+//                                //final ExecutionInfo executionInfo = resultWithPagingStateValue.get(1, ExecutionInfo.class);
+//
+//
+//                            } else if (result == null) {
+//
+//                            } else if (ex != null) {
+//                                LOGGER.error("Exception when getting latest preview videos : " + mergeStackTrace(ex));
+//
+//                                responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+//                            }
+//                            return result;
+//                        });
+
 //                results.addAll(resultWithPagingState
 //                        ._1()
 //                        .stream()
 //                        .map(LatestVideos::toVideoPreview)
 //                        .collect(toList()));
-//
+
+                Result<LatestVideos> videos = latestVideosMapper.map(resultsTest);
+                //TupleValue resultWithPagingStateValue = resultWithPagingState.newValue(null, null);
+                //resultWithPagingStateValue.setList(0, videos.all());
+                //resultWithPagingStateValue.setList(1, resultsTest.getAllExecutionInfo());
+                //TupleValue resultWithPagingStateValue = resultWithPagingState.newValue(resultsTest, resultsTest.getExecutionInfo());
+                results.addAll(videos.all()
+                        .stream()
+                        .map(LatestVideos::toVideoPreview)
+                        .collect(toList()));
+
 //                final ExecutionInfo executionInfo = resultWithPagingState._2();
-//
-//                // See if we can stop querying
-//                if (results.size() >= request.getPageSize()) {
-//
-//                    // Are there more rows in the current bucket?
-//                    if (executionInfo.getPagingState() != null) {
-//                        // Start from where we left off in this bucket if we get the next page
-//                        nextPageState = createPagingState(buckets, bucketIndex, executionInfo.getPagingState().toString());
-//                    } else if (bucketIndex != buckets.size() - 1) {
-//                        // Start from the beginning of the next bucket since we're out of rows in this one
-//                        nextPageState = createPagingState(buckets, bucketIndex + 1, "");
-//                    }
-//                    break;
-//                }
-//
-//                bucketIndex++;
-//            }
-            responseObserver.onNext(GetLatestVideoPreviewsResponse
-                    .newBuilder()
-                    .addAllVideoPreviews(results)
-                    .setPagingState(nextPageState).build());
-            responseObserver.onCompleted();
+                  final ExecutionInfo executionInfo = videos.getExecutionInfo();
+
+                // See if we can stop querying
+                if (results.size() >= request.getPageSize()) {
+
+                    // Are there more rows in the current bucket?
+                    if (executionInfo.getPagingState() != null) {
+                        // Start from where we left off in this bucket if we get the next page
+                        nextPageState = createPagingState(buckets, bucketIndex, executionInfo.getPagingState().toString());
+                    } else if (bucketIndex != buckets.size() - 1) {
+                        // Start from the beginning of the next bucket since we're out of rows in this one
+                        nextPageState = createPagingState(buckets, bucketIndex + 1, "");
+                    }
+                    break;
+                }
+
+                bucketIndex++;
+            }
+
+                responseObserver.onNext(GetLatestVideoPreviewsResponse
+                        .newBuilder()
+                        .addAllVideoPreviews(results)
+                        .setPagingState(nextPageState).build());
+                responseObserver.onCompleted();
 
         } catch (Throwable throwable) {
 

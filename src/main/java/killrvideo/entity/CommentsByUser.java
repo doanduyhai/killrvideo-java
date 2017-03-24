@@ -38,10 +38,10 @@ public class CommentsByUser {
     @Column
     private String comment;
 
-    @Column
-    @NotNull
+//    @Column
+//    @NotNull
     //:TODO figure out to to convert Computed annotation
-    //@Computed(function = "toTimestamp", targetColumns = {"commentid"}, alias = "comment_timestamp", cqlClass = Date.class)
+    @Computed("dateOf(commentid)")
     private Date dateOfComment;
 
     public CommentsByUser() {

@@ -10,6 +10,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 
+import com.datastax.driver.mapping.Mapper;
+import com.google.common.util.concurrent.ListenableFuture;
+import killrvideo.entity.UserVideos;
+import killrvideo.entity.Video;
+import killrvideo.utils.FutureUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -36,6 +41,9 @@ public class StatisticsService extends AbstractStatisticsService {
     @Inject
     VideoPlaybackStats_Manager videoPlaybackStatsManager;
     */
+
+    @Inject
+    Mapper<VideoPlaybackStats> videoPlaybackStatsMapper;
 
     @Inject
     KillrVideoInputValidator validator;
@@ -93,6 +101,7 @@ public class StatisticsService extends AbstractStatisticsService {
     public void getNumberOfPlays(GetNumberOfPlaysRequest request, StreamObserver<GetNumberOfPlaysResponse> responseObserver) {
 
         LOGGER.debug("Start getting number of plays");
+        LOGGER.debug("Statistics request is: " + request.toString());
 
         if (!validator.isValid(request, responseObserver)) {
             return;
@@ -111,12 +120,23 @@ public class StatisticsService extends AbstractStatisticsService {
                 .newBuilder();
         */
 
+        //:TODO Determine that buildCompletableFuture(uuid) below does what we think it does
+        final List<CompletableFuture<VideoPlaybackStats>> statsFuture = request
+                .getVideoIdsList()
+                .stream()
+                .map(uuid -> UUID.fromString(uuid.getValue()))
+                .map(uuid -> videoPlaybackStatsMapper.getAsync(uuid))
+                .map(uuid -> FutureUtils.buildCompletableFuture(uuid))
+                .collect(toList());
+
+        final GetNumberOfPlaysResponse.Builder builder = GetNumberOfPlaysResponse
+                .newBuilder();
+
         /**
          * We fire a list of async SELECT request and wait for all of them
          * to complete before returning a response to the client
          */
         //:TODO Fix this
-        /*
         CompletableFuture
                 .allOf(statsFuture.toArray(new CompletableFuture[statsFuture.size()]))
                 .thenApply(v -> statsFuture.stream().map(CompletableFuture::join).collect(toList()))
@@ -152,6 +172,5 @@ public class StatisticsService extends AbstractStatisticsService {
                     }
                     return list;
                 });
-        */
     }
 }
