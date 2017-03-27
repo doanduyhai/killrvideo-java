@@ -39,7 +39,6 @@ public class CassandraConfiguration {
 
     //@Bean(destroyMethod = "shutDown")
     @Bean
-    //public ManagerFactory cassandraNativeClusterProduction() {
     public MappingManager cassandraNativeClusterProduction() {
 
         LOGGER.info("Initializing connection to Cassandra");
@@ -78,13 +77,6 @@ public class CassandraConfiguration {
             final MappingManager manager = new MappingManager(session);
             LOGGER.info(String.format("Creating mapping manager %s", manager));
 
-            /* final ManagerFactory factory = ManagerFactoryBuilder
-                    .builder(cluster)
-                    .withBeanValidation(true)
-                    .withPostLoadBeanValidation(true)
-                    .build(); */
-
-            //return factory;
             return manager;
 
         } catch (Throwable e) {

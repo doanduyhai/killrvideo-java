@@ -1,6 +1,5 @@
 package killrvideo.service;
 
-//import static info.archinnov.achilles.internals.futures.FutureUtils.toCompletableFuture;
 import static java.util.UUID.fromString;
 import static java.util.stream.Collectors.toList;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
@@ -34,7 +33,6 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.sun.org.apache.bcel.internal.generic.LOOKUPSWITCH;
-import info.archinnov.achilles.type.tuples.Tuple;
 import killrvideo.entity.*;
 import killrvideo.utils.FutureUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -51,11 +49,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.EventBus;
 
-//import info.archinnov.achilles.generated.manager.LatestVideos_Manager;
-//import info.archinnov.achilles.generated.manager.UserVideos_Manager;
-//import info.archinnov.achilles.generated.manager.Video_Manager;
-//import info.archinnov.achilles.type.tuples.Tuple2;
-//import info.archinnov.achilles.type.tuples.Tuple3;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 
@@ -77,17 +70,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     public static final int LATEST_VIDEOS_TTL_SECONDS = MAX_DAYS_IN_PAST_FOR_LATEST_VIDEOS * 24 * 3600;
     public static final Pattern PARSE_LATEST_PAGING_STATE = Pattern.compile("((?:[0-9]{8}_){7}[0-9]{8}),([0-9]),(.*)");
 
-    //:TODO Fix this
-    /*
-    @Inject
-    Video_Manager videoManager;
-
-    @Inject
-    UserVideos_Manager userVideosManager;
-
-    @Inject
-    LatestVideos_Manager latestVideosManager;
-    */
     @Inject
     Mapper<Video> videoMapper;
 
@@ -109,15 +91,38 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Inject
     KillrVideoInputValidator validator;
 
-    Session session;
+    private Session session;
+    private String latestVideosTableName;
+    private PreparedStatement startingPointPrepared;
+    private PreparedStatement noStartingPointPrepared;
 
-    //:TODO Fix this
-    /*
     @PostConstruct
     public void init(){
-        this.session = videoManager.getNativeSession();
+        this.session = manager.getSession();
+
+        /**
+         * Set the following up in PostConstruct because 1) we have to
+         * wait until after dependency injection for these to work,
+         * and 2) we only want to load the prepared statements once at
+         * the start of the service.  From here the prepared statements should
+         * be cached on our Cassandra nodes.
+         */
+        latestVideosTableName = latestVideosMapper.getTableMetadata().getName();
+        startingPointPrepared = session.prepare(
+                "" +
+                        "SELECT * " +
+                        "FROM " + Schema.KEYSPACE + "." + latestVideosTableName + " " +
+                        "WHERE yyyymmdd = :ymd " +
+                        "AND (added_date, videoid) <= (:ad, :vid)"
+        );
+
+        noStartingPointPrepared = session.prepare(
+                "" +
+                        "SELECT * " +
+                        "FROM " + Schema.KEYSPACE + "." + latestVideosTableName + " " +
+                        "WHERE yyyymmdd = :ymd "
+        );
     }
-    */
 
     @Override
     public void submitUploadedVideo(SubmitUploadedVideoRequest request, StreamObserver<SubmitUploadedVideoResponse> responseObserver) {
@@ -237,7 +242,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         batchStatement.add(s3);
         batchStatement.setDefaultTimestamp(now.getTime());
 
-        ResultSetFuture batchResultsFuture = manager.getSession().executeAsync(batchStatement);
+        ResultSetFuture batchResultsFuture = session.executeAsync(batchStatement);
         FutureUtils.buildCompletableFuture(batchResultsFuture)
         //toCompletableFuture(session.executeAsync(batchStatement), executorService)
                 .handle((rs, ex) -> {
@@ -288,7 +293,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         // videoId matches the partition key set in the Video class
         Statement videoQuery = videoMapper.getQuery(videoId);
-        ResultSetFuture resultsFuture = manager.getSession().executeAsync(videoQuery);
+        ResultSetFuture resultsFuture = session.executeAsync(videoQuery);
         FutureUtils.buildCompletableFuture(resultsFuture)
                 .handle((entity, ex) -> {
                     if (entity != null) {
@@ -384,14 +389,14 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //                .from(Schema.KEYSPACE,"users")
 //                .where(QueryBuilder.in("userid",userIds));
 //
-//        ResultSetFuture future = manager.getSession().executeAsync(bs);
+//        ResultSetFuture future = session.executeAsync(bs);
 
         /*BuiltStatement bs = QueryBuilder
                 .select().all()
                 .from(Schema.KEYSPACE,"users")
                 .where(QueryBuilder.in("userid",userIds));
 
-        ResultSetFuture future = manager.getSession().executeAsync(bs);*/
+        ResultSetFuture future = session.executeAsync(bs);*/
 
 //        Futures.addCallback(listFuture,
 //                new FutureCallback<ResultSet>() {
@@ -460,16 +465,15 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
             return;
         }
 
-//        final Tuple3<List<String>, Integer, String> tuple3 = parseCustomPagingState(Optional.ofNullable(request.getPagingState()))
-//                .orElseGet(this.buildFirstCustomPagingState());
+        /**
+         * TupleValue here contains a tuple with 3 elements (List<String>, Integer, String)
+         */
         final TupleValue tuple3 = parseCustomPagingState(Optional.ofNullable(request.getPagingState()))
                 .orElseGet(this.buildFirstCustomPagingState());
 
-        LOGGER.debug("Paging state is: " + request.getPagingState());
-
-        List<String> buckets = tuple3.getList(0, new TypeToken<String>() {});
+        final List<String> buckets = tuple3.getList(0, new TypeToken<String>() {});
         int bucketIndex = tuple3.getInt(1);
-        String rowPagingState = tuple3.getString(2);
+        final String rowPagingState = tuple3.getString(2);
         LOGGER.debug("Tuple is: buckets: " + buckets.size() + " index: " + bucketIndex + " state: " + rowPagingState);
 
         final Optional<Date> startingAddedDate = Optional
@@ -488,9 +492,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final List<VideoPreview> results = new ArrayList<>();
         String nextPageState = "";
 
-
-        LOGGER.debug("BLOCK BLOCK BLOCK");
-
         /**
          * Boolean to know if the native Cassandra paging
          * state has been used
@@ -502,21 +503,14 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
                 int recordsStillNeeded = request.getPageSize() - results.size();
                 final String yyyyMMdd = buckets.get(bucketIndex);
-                //final Tuple2<List<LatestVideos>, ExecutionInfo> resultWithPagingState;
-                TupleType resultWithPagingState = manager.getSession().getCluster().getMetadata()
-                        .newTupleType(
-                                DataType.list(DataType.custom("killrvideo.entity.LatestVideos")),
-                                DataType.list(DataType.custom("ExecutionInfo"))
-                        );
 
                 final Optional<String> pagingStateString =
                         Optional.ofNullable(rowPagingState)
                                 .filter(StringUtils::isNotBlank)
                                 .filter(pg -> !cassandraPagingStateUsed.get());
 
-                BuiltStatement statement;
-                ResultSetFuture future = null;
-                ResultSet resultsTest = null;
+                ResultSetFuture future;
+                ResultSet futureResults;
 
                 /**
                  * If startingAddedDate and startingVideoId are provided,
@@ -533,108 +527,69 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //                            .withFetchSize(recordsStillNeeded)
 //                            .getListWithStats();
 
-                    statement = QueryBuilder
-                            .select().all()
-                            .from(Schema.KEYSPACE, latestVideosMapper.getTableMetadata().getName())
-                            .where(QueryBuilder.eq("yyyymmdd", yyyyMMdd))
-                            //.and(QueryBuilder.lte("videoid", startingVideoId.get()))
-                            .and(QueryBuilder.lte("added_date", startingAddedDate.get()));
+                    /**
+                     * The startingPointPrepared statement can be found at the top
+                     * of the class within PostConstruct
+                     */
+                    BoundStatement bound = startingPointPrepared.bind()
+                            .setString("ymd", yyyyMMdd)
+                            .setTimestamp("ad", startingAddedDate.get())
+                            .setUUID("vid", startingVideoId.get());
 
-                    statement
+                    bound
                             .setFetchSize(recordsStillNeeded);
 
-                    future = manager.getSession().executeAsync(statement);
-                    resultsTest = future.getUninterruptibly();
+                    future = session.executeAsync(bound);
+                    futureResults = future.getUninterruptibly();
 
-                    //resultWithPagingStateValue = resultWithPagingState.newValue(manager.getSession().executeAsync(statement));
+                    LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
 
                 } else {
-//                    resultWithPagingState = latestVideosManager
-//                            .dsl()
-//                            .select()
-//                            .allColumns_FromBaseTable()
-//                            .where()
-//                            .yyyymmdd().Eq(yyyyMMdd)
-//                            .withFetchSize(recordsStillNeeded)
-//                            .withOptionalPagingStateString(pagingStateString)
-//                            .getListWithStats();
-//                    cassandraPagingStateUsed.compareAndSet(false, true);
+                    /**
+                     * The noStartingPointPrepared statement can be found at the top
+                     * of the class within PostConstruct
+                     */
+                    BoundStatement bound = noStartingPointPrepared.bind()
+                            .setString("ymd", yyyyMMdd);
 
-                    statement = QueryBuilder
-                            .select().all()
-                            .from(Schema.KEYSPACE, latestVideosMapper.getTableMetadata().getName())
-                            .where(QueryBuilder.eq("yyyymmdd", yyyyMMdd));
-
-                    statement
+                    bound
                             .setFetchSize(recordsStillNeeded);
 
                     //:TODO Figure out the proper way to do this with Optional and java 8 lambada
                     if (pagingStateString.isPresent()) {
-                        statement.setPagingState(PagingState.fromString(pagingStateString.get()));
+                        bound.setPagingState(PagingState.fromString(pagingStateString.get()));
                     }
 
-                    future = manager.getSession().executeAsync(statement);
-                    resultsTest = future.getUninterruptibly();
+                    /**
+                     * Not entirely sure why DuyHai used getUninterruptibly within his
+                     * getListWithStats() call from Achilles, but I copied it to ensure
+                     * I replicated the same functionality.  Must get clarification on this.
+                     */
+                    future = session.executeAsync(bound);
+                    futureResults = future.getUninterruptibly();
+
                     cassandraPagingStateUsed.compareAndSet(false, true);
+
+                    LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
                 }
 
-
-//                FutureUtils.buildCompletableFuture(future)
-//                        .handle((result, ex) -> {
-//                            //final TupleValue resultWithPagingStateValue = resultWithPagingState.newValue(null, null);
-//
-//                            if (result != null && !result.isExhausted()) {
-//                                List<Row> rows = result.all();
-//                                //resultWithPagingStateValue.setList(0, rows);
-//                                //resultWithPagingStateValue.setList(1, result.getAllExecutionInfo());
-//                                //cassandraPagingStateUsed.compareAndSet(false, true);
-//
-//
-//                                results.addAll(resultWithPagingState.newValue(result.all(), result.getExecutionInfo())
-//                                        .get(0, TypeTokens.listOf(LatestVideos.class))
-//                                        .stream()
-//                                        .map(LatestVideos::toVideoPreview)
-//                                        .collect(toList()));
-//
-//                                //final ExecutionInfo executionInfo = resultWithPagingStateValue.get(1, ExecutionInfo.class);
-//
-//
-//                            } else if (result == null) {
-//
-//                            } else if (ex != null) {
-//                                LOGGER.error("Exception when getting latest preview videos : " + mergeStackTrace(ex));
-//
-//                                responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-//                            }
-//                            return result;
-//                        });
-
-//                results.addAll(resultWithPagingState
-//                        ._1()
-//                        .stream()
-//                        .map(LatestVideos::toVideoPreview)
-//                        .collect(toList()));
-
-                Result<LatestVideos> videos = latestVideosMapper.map(resultsTest);
-                //TupleValue resultWithPagingStateValue = resultWithPagingState.newValue(null, null);
-                //resultWithPagingStateValue.setList(0, videos.all());
-                //resultWithPagingStateValue.setList(1, resultsTest.getAllExecutionInfo());
-                //TupleValue resultWithPagingStateValue = resultWithPagingState.newValue(resultsTest, resultsTest.getExecutionInfo());
+                Result<LatestVideos> videos = latestVideosMapper.map(futureResults);
                 results.addAll(videos.all()
                         .stream()
                         .map(LatestVideos::toVideoPreview)
                         .collect(toList()));
 
-//                final ExecutionInfo executionInfo = resultWithPagingState._2();
-                  final ExecutionInfo executionInfo = videos.getExecutionInfo();
+                final ExecutionInfo executionInfo = videos.getExecutionInfo();
 
                 // See if we can stop querying
                 if (results.size() >= request.getPageSize()) {
+                    final PagingState pagingState = executionInfo.getPagingState();
 
                     // Are there more rows in the current bucket?
-                    if (executionInfo.getPagingState() != null) {
+                    if (pagingState != null) {
                         // Start from where we left off in this bucket if we get the next page
-                        nextPageState = createPagingState(buckets, bucketIndex, executionInfo.getPagingState().toString());
+                        nextPageState = createPagingState(buckets, bucketIndex, pagingState.toString());
+
                     } else if (bucketIndex != buckets.size() - 1) {
                         // Start from the beginning of the next bucket since we're out of rows in this one
                         nextPageState = createPagingState(buckets, bucketIndex + 1, "");
@@ -642,6 +597,13 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     break;
                 }
 
+                LOGGER.debug("------------------" +
+                        " buckets: " + buckets.size() +
+                        " index: " + bucketIndex +
+                        " state: " + rowPagingState +
+                        " results size: " + results.size() +
+                        " request pageSize: " + request.getPageSize()
+                );
                 bucketIndex++;
             }
 
@@ -652,13 +614,10 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 responseObserver.onCompleted();
 
         } catch (Throwable throwable) {
-
             LOGGER.error("Exception when getting latest preview videos : " + mergeStackTrace(throwable));
 
             responseObserver.onError(Status.INTERNAL.withCause(throwable).asRuntimeException());
         }
-
-
         LOGGER.debug("End getting latest video preview");
     }
 
@@ -741,12 +700,26 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //                });
     }
 
+    /**
+     * Create a paging state string from the passed in parameters
+     * @param buckets
+     * @param bucketIndex
+     * @param rowsPagingState
+     * @return String
+     */
     private String createPagingState(List<String> buckets, int bucketIndex, String rowsPagingState) {
         StringJoiner joiner = new StringJoiner("_");
         buckets.forEach(joiner::add);
         return joiner.toString() + "," + bucketIndex + "," + rowsPagingState;
     }
 
+    /**
+     * Parse the passed in paging state and return a
+     * TupleValue that essentially acts as a
+     * tuple with 3 elements (List<String>, Integer, String) within Optional.
+     * @param customPagingState
+     * @return Optional
+     */
     private Optional<TupleValue> parseCustomPagingState(Optional<String> customPagingState) {
         return customPagingState
                 .map(pagingState -> {
@@ -755,8 +728,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         final List<String> buckets = Lists.newArrayList(matcher.group(1).split("_"));
                         final int currentBucket = Integer.parseInt(matcher.group(2));
                         final String cassandraPagingState = matcher.group(3);
-                        TupleType tuple3 = manager.getSession().getCluster().getMetadata()
-                                .newTupleType(DataType.list(DataType.varchar()), DataType.cint(), DataType.varchar());
+                        TupleType tuple3 = session.getCluster().getMetadata()
+                                .newTupleType(DataType.list(DataType.text()), DataType.cint(), DataType.text());
                         return tuple3.newValue(buckets, currentBucket, cassandraPagingState);
                     } else {
                         return null;
@@ -764,7 +737,13 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 });
     }
 
-//    private Supplier<Tuple3<List<String>, Integer, String>> buildFirstCustomPagingState() {
+
+    /**
+     * Build the first paging state if one does not already exist
+     * and return a TupleValue that essentially acts as a
+     * tuple with 3 elements (List<String>, Integer, String) within Supplier.
+     * @return TupleValue
+     */
     private Supplier<TupleValue> buildFirstCustomPagingState() {
         return () -> {
             final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -773,10 +752,9 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     .map(now::minusDays)
                     .map(x -> x.format(formatter))
                     .collect(Collectors.toList());
-            TupleType tuple3 = manager.getSession().getCluster().getMetadata()
-                    .newTupleType(DataType.list(DataType.varchar()), DataType.cint(), DataType.varchar());
+            TupleType tuple3 = session.getCluster().getMetadata()
+                    .newTupleType(DataType.list(DataType.text()), DataType.cint(), DataType.text());
             return tuple3.newValue(buckets, 0, null);
-            //return Tuple3.of(buckets, 0, null);
         };
     }
 }
