@@ -64,7 +64,7 @@ DML logs and DEBUG messages:
 ## Pull Requests, Requests for More Examples
 This project will continue to evolve along with Cassandra and you can expect that as Cassandra and the DataStax driver add new features. This sample application will try and provide examples of those. 
 
-I'll gladly accept any pull requests for bug fixes, new features, etc.  and if you have a request for an example that you don't see in the code currently, send me a message [@doanduyhai][twitter] on Twitter or open an issue here on GitHub.
+I'll gladly accept any pull requests for bug fixes, new features, etc.  and if you have a request for an example that you don't see in the code currently, send me a message [@SonicDMG][twitter] on Twitter or open an issue here on GitHub.
 
 ## License
 Copyright 2017 David Gilardi, derived from original work by Duy Hai DOAN on the [Achilles] framework
