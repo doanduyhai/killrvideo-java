@@ -3,16 +3,23 @@
 A reference application for Java developers looking to learn more about using [Apache Cassandra][cassandra] and
 [DataStax Enterprise][dse] in their applications and services. Learn more at [KillrVideo].
 
+This project is currently NOT in a state intended for outward consumption as I am still building and reworking all of
+the needed components for a fully functioning application using the [DSE Java driver].
+This work is fresh and ongoing as of 2017 so expect pretty consistent updates,
+but I would not recommend using it at this time.  I will update this README once things are in a steady state.
+
 ## Running Locally
 
 Use these guides to get started running KillrVideo locally on your development machine:
 * [Getting Started with KillrVideo][getting-started]: Follow this to setup common dependencies like Docker.
-* [Getting Started with Java](#getting-started-java): Follow this to get this C# code running.
+* [Getting Started with C#](#getting-started-csharp): Follow this to get this C# code running.
+* [Getting Started with Node.js](#getting-started-nodejs): Follow this to get this Node.js code running.
 
 ## Getting started with Java <a id="getting-started-java"></a>
 
-The Java implementation of [Killrvideo] is using [Achilles Object Mapper]. Please read its documentation to understand
-the complete set of features of the framework
+The Java implementation of [Killrvideo] is using the 3.1 version of the [DSE Java driver]. Please read its documentation to understand
+the complete set of features of the framework.
+
 
 To get the Java impl running:
 
@@ -60,7 +67,7 @@ This project will continue to evolve along with Cassandra and you can expect tha
 I'll gladly accept any pull requests for bug fixes, new features, etc.  and if you have a request for an example that you don't see in the code currently, send me a message [@doanduyhai][twitter] on Twitter or open an issue here on GitHub.
 
 ## License
-Copyright 2016 Duy Hai DOAN
+Copyright 2017 David Gilardi, derived from original work by Duy Hai DOAN on the [Achilles] framework
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -79,5 +86,7 @@ limitations under the License.
 [Killrvideo]: https://killrvideo.github.io
 [getting-started]: https://killrvideo.github.io/getting-started/
 [getting-started-csharp]: https://killrvideo.github.io/docs/languages/c-sharp/
-[twitter]: https://twitter.com/doanduyhai
-[Achilles Object Mapper]: http://achilles.io
+[getting-started-nodejs]: https://killrvideo.github.io/docs/languages/nodejs/
+[twitter]: https://twitter.com/SonicDMG
+[DSE Java driver]: http://docs.datastax.com/en/developer/java-driver/3.1/
+[Achilles]: https://github.com/doanduyhai/Achilles
