@@ -100,7 +100,7 @@ public class StatisticsService extends AbstractStatisticsService {
     @Override
     public void getNumberOfPlays(GetNumberOfPlaysRequest request, StreamObserver<GetNumberOfPlaysResponse> responseObserver) {
 
-        LOGGER.debug("Start getting number of plays");
+        LOGGER.debug("-----Start getting number of plays------");
         LOGGER.debug("Statistics request is: " + request.toString());
 
         if (!validator.isValid(request, responseObserver)) {

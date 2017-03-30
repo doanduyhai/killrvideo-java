@@ -37,7 +37,7 @@ public class CommentsByVideo {
     @Column
     private String comment;
 
-//    @NotNull
+    @NotNull
 //    @Column
     //:TODO figure out to to convert Computed annotation
     //@Computed(function = "toTimestamp", targetColumns = {"commentid"}, alias = "comment_timestamp", cqlClass = Date.class)

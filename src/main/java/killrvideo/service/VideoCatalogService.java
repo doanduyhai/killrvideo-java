@@ -93,8 +93,11 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
     private Session session;
     private String latestVideosTableName;
-    private PreparedStatement startingPointPrepared;
-    private PreparedStatement noStartingPointPrepared;
+    private String userVideosTableName;
+    private PreparedStatement latestVideoPreview_startingPointPrepared;
+    private PreparedStatement latestVideoPreview_noStartingPointPrepared;
+    private PreparedStatement userVideoPreview_startingPointPrepared;
+    private PreparedStatement userVideoPreview_noStartingPointPrepared;
 
     @PostConstruct
     public void init(){
@@ -107,8 +110,10 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
          * the start of the service.  From here the prepared statements should
          * be cached on our Cassandra nodes.
          */
+
+        // Prepared statements for getLatestVideoPreviews()
         latestVideosTableName = latestVideosMapper.getTableMetadata().getName();
-        startingPointPrepared = session.prepare(
+        latestVideoPreview_startingPointPrepared = session.prepare(
                 "" +
                         "SELECT * " +
                         "FROM " + Schema.KEYSPACE + "." + latestVideosTableName + " " +
@@ -116,11 +121,28 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         "AND (added_date, videoid) <= (:ad, :vid)"
         );
 
-        noStartingPointPrepared = session.prepare(
+        latestVideoPreview_noStartingPointPrepared = session.prepare(
                 "" +
                         "SELECT * " +
                         "FROM " + Schema.KEYSPACE + "." + latestVideosTableName + " " +
                         "WHERE yyyymmdd = :ymd "
+        );
+
+        // Prepared statements for getUserVideoPreviews()
+        userVideosTableName = userVideosMapper.getTableMetadata().getName();
+        userVideoPreview_startingPointPrepared = session.prepare(
+                "" +
+                        "SELECT * " +
+                        "FROM " + Schema.KEYSPACE + "." + userVideosTableName + " " +
+                        "WHERE userid = :uid " +
+                        "AND (added_date, videoid) <= (:ad, :vid)"
+        );
+
+        userVideoPreview_noStartingPointPrepared = session.prepare(
+                "" +
+                        "SELECT * " +
+                        "FROM " + Schema.KEYSPACE + "." + userVideosTableName + " " +
+                        "WHERE userid = :uid "
         );
     }
 
@@ -198,7 +220,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         }
 
         final Date now = new Date();
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+        final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
         final String yyyyMMdd = dateFormat.format(now);
         final String location = request.getYouTubeVideoId();
         final String previewImageLocation = "//img.youtube.com/vi/"+ location + "/hqdefault.jpg";
@@ -295,15 +317,16 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         Statement videoQuery = videoMapper.getQuery(videoId);
         ResultSetFuture resultsFuture = session.executeAsync(videoQuery);
         FutureUtils.buildCompletableFuture(resultsFuture)
-                .handle((entity, ex) -> {
-                    if (entity != null) {
-                        //:TODO Have no idea if I can cast the response this way, check this later after more is hooked up
-                        LOGGER.debug("Video is: " + ((Video) entity).getName());
-                        responseObserver.onNext(((Video) entity).toVideoResponse());
+                .handle((videoResult, ex) -> {
+                    Video video = videoMapper.map(videoResult).one();
+
+                    if (video != null) {
+                        LOGGER.debug("Video is: " + (video.getName()));
+                        responseObserver.onNext((video.toVideoResponse()));
                         responseObserver.onCompleted();
                         LOGGER.debug("End getting video");
 
-                    } else if (entity == null) {
+                    } else if (video == null) {
                         LOGGER.warn("Video with id " + videoId + " was not found");
                         responseObserver.onError(Status.NOT_FOUND
                                 .withDescription("Video with id " + videoId + " was not found").asRuntimeException());
@@ -313,7 +336,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
 
                     }
-                    return entity;
+                    return videoResult;
                 });
     }
 
@@ -461,7 +484,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         LOGGER.debug("-----Start getting latest video preview-----");
 
         if (!validator.isValid(request, responseObserver)) {
-            LOGGER.debug("Video request IS NOT VALID");
             return;
         }
 
@@ -500,7 +522,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         try {
             while (bucketIndex < buckets.size()) {
-
                 int recordsStillNeeded = request.getPageSize() - results.size();
                 final String yyyyMMdd = buckets.get(bucketIndex);
 
@@ -517,21 +538,11 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                  * we do NOT use the paging state
                  */
                 if (startingAddedDate.isPresent() && startingVideoId.isPresent()) {
-//                    resultWithPagingState = latestVideosManager
-//                            .dsl()
-//                            .select()
-//                            .allColumns_FromBaseTable()
-//                            .where()
-//                            .yyyymmdd().Eq(yyyyMMdd)
-//                            .addedDate_And_videoid().Lte(startingAddedDate.get(), startingVideoId.get())
-//                            .withFetchSize(recordsStillNeeded)
-//                            .getListWithStats();
-
                     /**
                      * The startingPointPrepared statement can be found at the top
                      * of the class within PostConstruct
                      */
-                    BoundStatement bound = startingPointPrepared.bind()
+                    BoundStatement bound = latestVideoPreview_startingPointPrepared.bind()
                             .setString("ymd", yyyyMMdd)
                             .setTimestamp("ad", startingAddedDate.get())
                             .setUUID("vid", startingVideoId.get());
@@ -549,13 +560,13 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                      * The noStartingPointPrepared statement can be found at the top
                      * of the class within PostConstruct
                      */
-                    BoundStatement bound = noStartingPointPrepared.bind()
+                    BoundStatement bound = latestVideoPreview_noStartingPointPrepared.bind()
                             .setString("ymd", yyyyMMdd);
 
                     bound
                             .setFetchSize(recordsStillNeeded);
 
-                    //:TODO Figure out the proper way to do this with Optional and java 8 lambada
+                    //:TODO Figure out more streamlined way to do this with Optional and java 8 lambada
                     if (pagingStateString.isPresent()) {
                         bound.setPagingState(PagingState.fromString(pagingStateString.get()));
                     }
@@ -607,11 +618,11 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 bucketIndex++;
             }
 
-                responseObserver.onNext(GetLatestVideoPreviewsResponse
-                        .newBuilder()
-                        .addAllVideoPreviews(results)
-                        .setPagingState(nextPageState).build());
-                responseObserver.onCompleted();
+            responseObserver.onNext(GetLatestVideoPreviewsResponse
+                    .newBuilder()
+                    .addAllVideoPreviews(results)
+                    .setPagingState(nextPageState).build());
+            responseObserver.onCompleted();
 
         } catch (Throwable throwable) {
             LOGGER.error("Exception when getting latest preview videos : " + mergeStackTrace(throwable));
@@ -627,32 +638,31 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         LOGGER.debug("-----Start getting user video preview-----");
 
-        //:TODO Fix this
+        if (!validator.isValid(request, responseObserver)) {
+            return;
+        }
 
-//        if (!validator.isValid(request, responseObserver)) {
-//            return;
-//        }
-//
-//        final UUID userId = UUID.fromString(request.getUserId().getValue());
-//        final Optional<UUID> startingVideoId = Optional
-//                .ofNullable(request.getStartingVideoId())
-//                .map(Uuid::getValue)
-//                .filter(StringUtils::isNotBlank)
-//                .map(UUID::fromString);
-//
-//        final Optional<Date> startingAddedDate = Optional
-//                .ofNullable(request.getStartingAddedDate())
-//                .map(ts -> Instant.ofEpochSecond(ts.getSeconds(), ts.getNanos()))
-//                .map(Date::from);
-//
-//        final CompletableFuture<Tuple2<List<UserVideos>, ExecutionInfo>> listAsync;
-//        final Optional<String> pagingStateString = Optional.ofNullable(request.getPagingState()).filter(StringUtils::isNotBlank);
-//
-//        /**
-//         * If startingAddedDate and startingVideoId are provided,
-//         * we do NOT use the paging state
-//         */
-//        if (startingVideoId.isPresent() && startingAddedDate.isPresent()) {
+        final UUID userId = UUID.fromString(request.getUserId().getValue());
+        final Optional<UUID> startingVideoId = Optional
+                .ofNullable(request.getStartingVideoId())
+                .map(Uuid::getValue)
+                .filter(StringUtils::isNotBlank)
+                .map(UUID::fromString);
+
+        final Optional<Date> startingAddedDate = Optional
+                .ofNullable(request.getStartingAddedDate())
+                .map(ts -> Instant.ofEpochSecond(ts.getSeconds(), ts.getNanos()))
+                .map(Date::from);
+
+        //final CompletableFuture<Tuple2<List<UserVideos>, ExecutionInfo>> listAsync;
+        final Optional<String> pagingStateString = Optional.ofNullable(request.getPagingState()).filter(StringUtils::isNotBlank);
+        ResultSetFuture future;
+
+        /**
+         * If startingAddedDate and startingVideoId are provided,
+         * we do NOT use the paging state
+         */
+        if (startingVideoId.isPresent() && startingAddedDate.isPresent()) {
 //            listAsync = userVideosManager
 //                    .dsl()
 //                    .select()
@@ -662,8 +672,24 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //                    .addedDate_And_videoid().Lte(startingAddedDate.get(), startingVideoId.get())
 //                    .withFetchSize(request.getPageSize())
 //                    .getListAsyncWithStats();
-//
-//        } else {
+
+            /**
+             * The startingPointPrepared statement can be found at the top
+             * of the class within PostConstruct
+             */
+            BoundStatement bound = userVideoPreview_startingPointPrepared.bind()
+                    .setUUID("uid", userId)
+                    .setTimestamp("ad", startingAddedDate.get())
+                    .setUUID("vid", startingVideoId.get());
+
+            bound
+                    .setFetchSize(request.getPageSize());
+
+            future = session.executeAsync(bound);
+
+            LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
+
+        } else {
 //            listAsync = userVideosManager
 //                    .dsl()
 //                    .select()
@@ -673,32 +699,54 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //                    .withFetchSize(request.getPageSize())
 //                    .withOptionalPagingStateString(pagingStateString)
 //                    .getListAsyncWithStats();
-//        }
-//
-//        listAsync
-//                .handle((tuple2, ex) -> {
-//                    if (tuple2 != null) {
-//                        final GetUserVideoPreviewsResponse.Builder builder = GetUserVideoPreviewsResponse.newBuilder();
-//                        tuple2._1().stream().forEach(entity -> builder.addVideoPreviews(entity.toVideoPreview()));
-//                        builder.setUserId(request.getUserId());
-//                        Optional.ofNullable(tuple2._2().getPagingState())
-//                                .map(PagingState::toString)
-//                                .ifPresent(builder::setPagingState);
-//                        responseObserver.onNext(builder.build());
-//                        responseObserver.onCompleted();
-//
-//                        LOGGER.debug("End getting user video preview");
-//
-//                    } else if (ex != null) {
-//
-//                        LOGGER.error("Exception getting user video preview : " + mergeStackTrace(ex));
-//
-//                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-//
-//                    }
-//                    return tuple2;
-//                });
+
+            /**
+             * The noStartingPointPrepared statement can be found at the top
+             * of the class within PostConstruct
+             */
+            BoundStatement bound = userVideoPreview_noStartingPointPrepared.bind()
+                    .setUUID("uid", userId);
+
+            bound
+                    .setFetchSize(request.getPageSize());
+
+            //:TODO Figure out more streamlined way to do this with Optional and java 8 lambada
+            if (pagingStateString.isPresent()) {
+                bound.setPagingState(PagingState.fromString(pagingStateString.get()));
+            }
+
+            future = session.executeAsync(bound);
+
+            LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
+        }
+
+        FutureUtils.buildCompletableFuture(future)
+        //listAsync
+                .handle((entity, ex) -> {
+                    Result<UserVideos> userVideos = userVideosMapper.map(entity);
+
+                    if (userVideos != null) {
+                        final GetUserVideoPreviewsResponse.Builder builder = GetUserVideoPreviewsResponse.newBuilder();
+                        userVideos.all().stream().forEach(userVideo -> builder.addVideoPreviews(userVideo.toVideoPreview()));
+                        builder.setUserId(request.getUserId());
+                        Optional.ofNullable(userVideos.getExecutionInfo().getPagingState())
+                                .map(PagingState::toString)
+                                .ifPresent(builder::setPagingState);
+                        responseObserver.onNext(builder.build());
+                        responseObserver.onCompleted();
+
+                        LOGGER.debug("End getting user video preview");
+
+                    } else if (ex != null) {
+                        LOGGER.error("Exception getting user video preview : " + mergeStackTrace(ex));
+
+                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
+                    }
+                    return entity;
+                });
     }
+
 
     /**
      * Create a paging state string from the passed in parameters
@@ -713,10 +761,11 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         return joiner.toString() + "," + bucketIndex + "," + rowsPagingState;
     }
 
+
     /**
      * Parse the passed in paging state and return a
      * TupleValue that essentially acts as a
-     * tuple with 3 elements (List<String>, Integer, String) within Optional.
+     * tuple with 3 elements (List<String>, Integer, String) as Optional.
      * @param customPagingState
      * @return Optional
      */
@@ -741,7 +790,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     /**
      * Build the first paging state if one does not already exist
      * and return a TupleValue that essentially acts as a
-     * tuple with 3 elements (List<String>, Integer, String) within Supplier.
+     * tuple with 3 elements (List<String>, Integer, String) as Supplier.
      * @return TupleValue
      */
     private Supplier<TupleValue> buildFirstCustomPagingState() {

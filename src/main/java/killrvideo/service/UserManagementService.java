@@ -9,18 +9,19 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.annotation.Nullable;
+import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
-import com.datastax.driver.core.ResultSet;
-import com.datastax.driver.core.ResultSetFuture;
+import com.datastax.driver.core.*;
 import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.utils.MoreFutures;
 import com.datastax.driver.mapping.Result;
-import com.datastax.driver.core.Statement;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
+import killrvideo.entity.CommentsByVideo;
 import killrvideo.entity.Schema;
+import killrvideo.utils.FutureUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +35,6 @@ import com.google.common.eventbus.EventBus;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
-import com.datastax.driver.core.Row;
 
 
 import io.grpc.Status;
@@ -69,6 +69,18 @@ public class UserManagementService extends AbstractUserManagementService {
     @Inject
     KillrVideoInputValidator validator;
 
+    Session session;
+    private String usersTableName;
+    private String userCredentialsTableName;
+
+    @PostConstruct
+    public void init(){
+        this.session = manager.getSession();
+
+        usersTableName = userMapper.getTableMetadata().getName();
+        userCredentialsTableName = userCredentialsMapper.getTableMetadata().getName();
+    }
+
     @Override
     public void createUser(CreateUserRequest request, StreamObserver<CreateUserResponse> responseObserver) {
 
@@ -98,15 +110,14 @@ public class UserManagementService extends AbstractUserManagementService {
          * the LWT condition is on the user email
          */
         //UserCredentials credentials = new UserCredentials(email, hashedPassword, userId);
-
         BuiltStatement checkEmailQuery = QueryBuilder
-                .insertInto(Schema.KEYSPACE, userCredentialsMapper.getTableMetadata().getName())
+                .insertInto(Schema.KEYSPACE, userCredentialsTableName)
                 .value("email", email)
                 .value("pass", hashedPassword)
                 .value("userid", userId)
                 .ifNotExists(); // use lightweight transaction
 
-        ResultSet checkEmailResult = manager.getSession().execute(checkEmailQuery);
+        ResultSet checkEmailResult = session.execute(checkEmailQuery);
 
         /** Check the result of the LWT, if it's false
          * the email already exists within our user_credentials
@@ -126,12 +137,10 @@ public class UserManagementService extends AbstractUserManagementService {
          * No LWT error, we can proceed further
          */
         if (!emailAlreadyExists.get()) {
-
             /*Statement userInsert = userMapper
                     .saveQuery(new User(userId, request.getFirstName(), request.getLastName(), email, now));*/
-
             BuiltStatement userInsert = QueryBuilder
-                    .insertInto(Schema.KEYSPACE, userMapper.getTableMetadata().getName())
+                    .insertInto(Schema.KEYSPACE, usersTableName)
                     .value("userid", userId)
                     .value("firstname", request.getFirstName())
                     .value("lastname", request.getLastName())
@@ -139,7 +148,7 @@ public class UserManagementService extends AbstractUserManagementService {
                     .value("created_date", now)
                     .ifNotExists(); // use lightweight transaction
 
-            ResultSetFuture userResultsFuture = manager.getSession().executeAsync(userInsert);
+            ResultSetFuture userResultsFuture = session.executeAsync(userInsert);
             Futures.addCallback(userResultsFuture,
                     new FutureCallback<ResultSet>() {
                         @Override
@@ -249,90 +258,64 @@ public class UserManagementService extends AbstractUserManagementService {
 
         LOGGER.debug("userId list is: " + userIds[0]);
 
-
-        // Loop through the userIds and grab data.  This is just one way to do this
-        // and I haven't decided on the best method just yet
-        for(UUID id : userIds) {
-            LOGGER.debug("userId is: " + id);
-            User user = userMapper.get(id);
-            LOGGER.debug("user entity is: " + user);
-
-            // Try direct method
-            Statement query = QueryBuilder
-                    .select()
-                    .from(Schema.KEYSPACE,"users");
-//                    .where(QueryBuilder.eq("userid",id));
-
-            LOGGER.debug("Keyspace is: " + query.getKeyspace());
-            LOGGER.debug("Query is: " + query.toString());
-
-            ResultSet results = manager.getSession().execute(query);
-            Result<User> users = userMapper.map(results);
-
-            for(User u : users) {
-                LOGGER.debug("user data is: " + u.getEmail());
-                // Attempt to re-save these same users to see if something like
-                // IfNotExists() is inherit within the mapper
-                userMapper.save(u);
-            }
-        }
-
-//        /**
-//         * Instead of firing multiple async SELECT, we can as well use
-//         * the IN(..) clause to fetch multiple user infos. It is recommended
-//         * to limit the number of values inside the IN clause to a dozen
-//         */
-//        userManager
-//                .dsl()
-//                .select()
-//                .allColumns_FromBaseTable()
-//                .where()
-//                .userid().IN(userIds)
-//                .getListAsync()
-//                .handle((entities, ex) -> {
-//                    if (entities != null) {
-//                        entities.stream().forEach(entity -> builder.addProfiles(entity.toUserProfile()));
-//                        responseObserver.onNext(builder.build());
-//                        responseObserver.onCompleted();
-//
-//                        LOGGER.debug("End getting user profile");
-//
-//                    } else if (ex != null) {
-//
-//                        LOGGER.error("Exception getting user profile : " + mergeStackTrace(ex));
-//
-//                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-//
-//                    }
-//                    return entities;
-//                });
-
+        /**
+         * Instead of firing multiple async SELECT, we can as well use
+         * the IN(..) clause to fetch multiple user infos. It is recommended
+         * to limit the number of values inside the IN clause to a dozen
+         */
         BuiltStatement bs = QueryBuilder
                 .select().all()
-                .from(Schema.KEYSPACE,"users")
-                .where(QueryBuilder.in("userid",userIds));
+                .from(Schema.KEYSPACE, usersTableName)
+                .where(QueryBuilder.in("userid", userIds));
 
-        ResultSetFuture future = manager.getSession().executeAsync(bs);
-        Futures.addCallback(future,
-                new FutureCallback<ResultSet>() {
-                    @Override
-                    public void onSuccess(@Nullable ResultSet result) {
-                        Result<User> users = userMapper.map(result);
-                        users.forEach(user -> builder.addProfiles(user.toUserProfile()));
+        ResultSetFuture future = session.executeAsync(bs);
+        FutureUtils.buildCompletableFuture(future)
+                .handle((entities, ex) -> {
+                    Result<User> users = userMapper.map(entities);
+
+                    if (users != null) {
+                        users.all().stream().forEach(user -> builder.addProfiles(user.toUserProfile()));
                         responseObserver.onNext(builder.build());
                         responseObserver.onCompleted();
 
                         LOGGER.debug("End getting user profile");
-                    }
 
-                    @Override
-                    public void onFailure(Throwable t) {
-                        LOGGER.error("Exception getting user profile : " + mergeStackTrace(t));
+                    } else if (ex != null) {
 
-                        responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
+                        LOGGER.error("Exception getting user profile : " + mergeStackTrace(ex));
+
+                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
                     }
-                },
-                MoreExecutors.sameThreadExecutor()
-        );
+                    return entities;
+                });
+
+//        BuiltStatement bs = QueryBuilder
+//                .select().all()
+//                .from(Schema.KEYSPACE,"users")
+//                .where(QueryBuilder.in("userid",userIds));
+//
+//        ResultSetFuture future = session.executeAsync(bs);
+//        Futures.addCallback(future,
+//                new FutureCallback<ResultSet>() {
+//                    @Override
+//                    public void onSuccess(@Nullable ResultSet result) {
+//                        Result<User> users = userMapper.map(result);
+//                        users.forEach(user -> builder.addProfiles(user.toUserProfile()));
+//                        responseObserver.onNext(builder.build());
+//                        responseObserver.onCompleted();
+//
+//                        LOGGER.debug("End getting user profile");
+//                    }
+//
+//                    @Override
+//                    public void onFailure(Throwable t) {
+//                        LOGGER.error("Exception getting user profile : " + mergeStackTrace(t));
+//
+//                        responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
+//                    }
+//                },
+//                MoreExecutors.sameThreadExecutor()
+//        );
     }
 }

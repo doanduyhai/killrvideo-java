@@ -2,26 +2,29 @@ package killrvideo.service;
 
 //import static info.archinnov.achilles.internals.futures.FutureUtils.toCompletableFuture;
 import static java.util.UUID.fromString;
+import static java.util.stream.Collectors.toList;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
-import java.util.Date;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.time.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.UUID;
 import java.util.concurrent.Future;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
+import javax.xml.stream.events.Comment;
 
 import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.core.LocalDate;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
+import com.datastax.driver.mapping.Result;
 import com.google.common.util.concurrent.ListenableFuture;
 import killrvideo.entity.*;
 import killrvideo.utils.FutureUtils;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,17 +79,21 @@ public class CommentService extends AbstractCommentsService {
     KillrVideoInputValidator validator;
 
     Session session;
+    private String commentsByUserTableName;
+    private String commentsByVideoTableName;
 
-    //:TODO Fix this
-    /*@PostConstruct
+    @PostConstruct
     public void init(){
-        this.session = commentsByUserManager.getNativeSession();
-    }*/
+        this.session = manager.getSession();
+
+        commentsByUserTableName = commentsByUserMapper.getTableMetadata().getName();
+        commentsByVideoTableName = commentsByVideoMapper.getTableMetadata().getName();
+    }
 
     @Override
     public void commentOnVideo(final CommentOnVideoRequest request, StreamObserver<CommentOnVideoResponse> responseObserver) {
 
-        LOGGER.debug("Start comment on video request");
+        LOGGER.debug("-----Start comment on video request-----");
 
         if (!validator.isValid(request, responseObserver)) {
             return;
@@ -155,13 +162,12 @@ public class CommentService extends AbstractCommentsService {
         }
 
         //:TODO Fix this
-        /*
         final TimeUuid startingCommentId = request.getStartingCommentId();
-        final CompletableFuture<Tuple2<List<CommentsByUser>, ExecutionInfo>> future;
+        //final CompletableFuture<Tuple2<List<CommentsByUser>, ExecutionInfo>> future;
         final Optional<String> pagingStateString = Optional
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
-        */
+        ResultSetFuture future;
 
         /**
          * Query without startingCommentId to get a reference point
@@ -169,73 +175,103 @@ public class CommentService extends AbstractCommentsService {
          * the first user comment as reference point
          */
         //TODO: Fix this
-        /*
         if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
-            future = commentsByUserManager
-                    .dsl()
-                    .select()
-                    .commentid()
-                    .videoid()
-                    .comment()
-                    .dateOfComment()
-                    .fromBaseTable()
-                    .where()
-                    .userid().Eq(fromString(request.getUserId().getValue()))
-                    .withFetchSize(request.getPageSize())
-                    .withOptionalPagingStateString(pagingStateString)
-                    .getListAsyncWithStats();
+//            future = commentsByUserManager
+//                    .dsl()
+//                    .select()
+//                    .commentid()
+//                    .videoid()
+//                    .comment()
+//                    .dateOfComment()
+//                    .fromBaseTable()
+//                    .where()
+//                    .userid().Eq(fromString(request.getUserId().getValue()))
+//                    .withFetchSize(request.getPageSize())
+//                    .withOptionalPagingStateString(pagingStateString)
+//                    .getListAsyncWithStats();
 
+            BuiltStatement statement = QueryBuilder
+                    .select()
+                    .column("commentid")
+                    .column("videoid")
+                    .column("comment")
+                    .from(Schema.KEYSPACE, commentsByUserTableName)
+                    .where(QueryBuilder.eq("userid", fromString(request.getUserId().getValue())));
+
+            statement
+                    .setFetchSize(request.getPageSize());
+
+            //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambada
+            if (pagingStateString.isPresent()) {
+                statement.setPagingState(PagingState.fromString(pagingStateString.get()));
+            }
+
+            future = session.executeAsync(statement);
         }
-        */
+
         /**
          * Subsequent requests always provide startingCommentId to load page
          * of user comments. Fetch size/page size is expected to be > 1
          */
         //:TODO Fix this
-        /*
         else {
-            future = commentsByUserManager
-                    .dsl()
+//            future = commentsByUserManager
+//                    .dsl()
+//                    .select()
+//                    .commentid()
+//                    .videoid()
+//                    .comment()
+//                    .dateOfComment()
+//                    .fromBaseTable()
+//                    .where()
+//                    .userid().Eq(fromString(request.getUserId().getValue()))
+//                    .commentid().Lte(fromString(request.getStartingCommentId().getValue()))
+//                    .withFetchSize(request.getPageSize())
+//                    .getListAsyncWithStats();
+
+            BuiltStatement statement = QueryBuilder
                     .select()
-                    .commentid()
-                    .videoid()
-                    .comment()
-                    .dateOfComment()
-                    .fromBaseTable()
-                    .where()
-                    .userid().Eq(fromString(request.getUserId().getValue()))
-                    .commentid().Lte(fromString(request.getStartingCommentId().getValue()))
-                    .withFetchSize(request.getPageSize())
-                    .getListAsyncWithStats();
+                    .column("commentid")
+                    .column("videoid")
+                    .column("comment")
+                    .from(Schema.KEYSPACE, commentsByUserTableName)
+                    .where(QueryBuilder.eq("userid", fromString(request.getUserId().getValue())))
+                    .and(QueryBuilder.lte("commentid", fromString(request.getStartingCommentId().getValue())));
+
+            statement
+                    .setFetchSize(request.getPageSize());
+
+            future = session.executeAsync(statement);
         }
 
-        future.handle((tuple2, ex) -> {
-            if(tuple2 != null) {
-                final GetUserCommentsResponse.Builder builder = GetUserCommentsResponse.newBuilder();
-                tuple2._1().forEach(commentsByUser-> builder.addComments(commentsByUser.toUserComment()));
-                Optional.ofNullable(tuple2._2().getPagingState())
-                        .map(PagingState::toString)
-                        .ifPresent(builder::setPagingState);
-                responseObserver.onNext(builder.build());
-                responseObserver.onCompleted();
+        FutureUtils.buildCompletableFuture(future)
+                .handle((commentResult, ex) -> {
+                    Result<CommentsByUser> comments = commentsByUserMapper.map(commentResult);
 
-                LOGGER.debug("End get user comments request");
+                    if(comments != null) {
+                        final GetUserCommentsResponse.Builder builder = GetUserCommentsResponse.newBuilder();
+                        comments.all().forEach(commentsByUser-> builder.addComments(commentsByUser.toUserComment()));
+                        Optional.ofNullable(comments.getExecutionInfo().getPagingState())
+                                .map(PagingState::toString)
+                                .ifPresent(builder::setPagingState);
+                        responseObserver.onNext(builder.build());
+                        responseObserver.onCompleted();
 
-            } else if (ex != null) {
+                        LOGGER.debug("End get user comments request");
 
-                LOGGER.error("Exception getting user comments : " + mergeStackTrace(ex));
+                    } else if (ex != null) {
+                        LOGGER.error("Exception getting user comments : " + mergeStackTrace(ex));
 
-                responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-            }
-            return tuple2;
-        });
-        */
+                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+                    }
+                    return commentResult;
+                });
     }
 
     @Override
     public void getVideoComments(GetVideoCommentsRequest request, StreamObserver<GetVideoCommentsResponse> responseObserver) {
 
-        LOGGER.debug("Start get video comments request");
+        LOGGER.debug("-----Start get video comments request-----");
 
         if (!validator.isValid(request, responseObserver)) {
             return;
@@ -248,7 +284,7 @@ public class CommentService extends AbstractCommentsService {
                 .filter(StringUtils::isNotBlank);
         LOGGER.debug("Paging state is: " + pagingStateString.toString());
 
-        TupleType tuple2Type = manager.getSession().getCluster().getMetadata()
+        TupleType tuple2Type = session.getCluster().getMetadata()
                 .newTupleType(DataType.list(
                         DataType.custom("CommentsByVideo")),
                         DataType.custom("ExecutionInfo"));
@@ -279,21 +315,24 @@ public class CommentService extends AbstractCommentsService {
             LOGGER.debug("Query without startingCommentId");
             BuiltStatement statement = QueryBuilder
                     .select()
+                    //.all()
+                    .column("videoid")
                     .column("commentid")
                     .column("userid")
                     .column("comment")
-                    .from(Schema.KEYSPACE, commentsByVideoMapper.getTableMetadata().getName())
+                    .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
+                    .from(Schema.KEYSPACE, commentsByVideoTableName)
                     .where(QueryBuilder.eq("videoid", fromString(request.getVideoId().getValue())));
 
             statement
                     .setFetchSize(request.getPageSize());
 
-            //:TODO Figure out the proper way to do this with Optional and java 8 lambada
+            //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambada
             if (pagingStateString.isPresent()) {
                 statement.setPagingState(PagingState.fromString(pagingStateString.get()));
             }
 
-            future = manager.getSession().executeAsync(statement);
+            future = session.executeAsync(statement);
 
         }
         /**
@@ -318,54 +357,79 @@ public class CommentService extends AbstractCommentsService {
             LOGGER.debug("Query WITH startingCommentId");
             BuiltStatement statement = QueryBuilder
                     .select()
+                    //.all()
+                    .column("videoid")
                     .column("commentid")
                     .column("userid")
                     .column("comment")
-                    .from(Schema.KEYSPACE, commentsByVideoMapper.getTableMetadata().getName())
+                    .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
+                    .from(Schema.KEYSPACE, commentsByVideoTableName)
                     .where(QueryBuilder.eq("videoid", fromString(request.getVideoId().getValue())))
                     .and(QueryBuilder.lte("commentid", fromString(request.getStartingCommentId().getValue())));
 
             statement
                     .setFetchSize(request.getPageSize());
 
-            future = manager.getSession().executeAsync(statement);
+            future = session.executeAsync(statement);
         }
 
         //CompletableFuture<List<CommentsByVideo>, ExecutionInfo> test =  FutureUtils.buildCompletableFuture(future);
         //CompletableFuture<Tuple2<List<CommentsByVideo>, ExecutionInfo>> futureTest =
 
-        //:TODO Complete evaluating the tuple below
-        LOGGER.debug("Right before buildCompletableFuture for commentid");
         FutureUtils.buildCompletableFuture(future)
-                .handle((result, ex) -> {
-                    if (result != null) {
-                        LOGGER.debug("Spit it out: " + result.one());
-                    } else {
-                        LOGGER.debug("Nothing to see here");
-                    }
-                    return result;
-                });
+        .handle((commentResult, ex) -> {
+            try {
+                if (commentResult != null && !commentResult.isExhausted()) {
+                    final List<CommentsByVideo> commentsList = new ArrayList<>();
 
-//        FutureUtils.buildCompletableFuture(future)
-//        .handle((tuple2, ex) -> {
-//            if (tuple2 != null) {
-//                final GetVideoCommentsResponse.Builder builder = GetVideoCommentsResponse.newBuilder();
-//                tuple2._1().forEach(commentsByVideo -> builder.addComments(commentsByVideo.toVideoComment()));
-//                Optional.ofNullable(tuple2._2().getPagingState())
-//                        .map(PagingState::toString)
-//                        .ifPresent(builder::setPagingState);
-//                responseObserver.onNext(builder.build());
-//                responseObserver.onCompleted();
+                    List<Row> rows = commentResult.all();
+                    final GetVideoCommentsResponse.Builder builder = GetVideoCommentsResponse.newBuilder();
+                    //Result<CommentsByVideo> comments = commentsByVideoMapper.map(commentResult);
+//                    for (CommentsByVideo comment : comments.all()) {
+//                        builder.addComments(comment.toVideoComment());
+//                        LOGGER.debug(comment.getComment());
+//                    }
+////
+                    for (Row row : rows) {
+                        CommentsByVideo wtf = new CommentsByVideo(
+                                row.getUUID(0), row.getUUID(1), row.getUUID(2), row.getString(3)
+                        );
+
+                        //Date date = row.getTimestamp(4);
+                        wtf.setDateOfComment(row.getTimestamp(4));
+                        commentsList.add(wtf);
+                        LOGGER.debug(wtf.getComment());
+                        LOGGER.debug("DATEOF: " + wtf.getDateOfComment());
+
+                        builder.addComments(wtf.toVideoComment());
+                    }
 //
-//                LOGGER.debug("End get video comments request");
 //
-//            } else if (ex != null) {
+//                    //final GetVideoCommentsResponse.Builder builder = GetVideoCommentsResponse.newBuilder();
+//                    //commentsList.forEach(comment -> builder.addComments(comment.toVideoComment()));
+//                    //comments.all().stream().forEach(comment -> builder.addComments(comment.toVideoComment()));
+//                    //comments.forEach(commentsByVideo -> builder.addComments(commentsByVideo.toVideoComment()));
 //
-//                LOGGER.error("Exception getting video comments : " + mergeStackTrace(ex));
-//
-//                responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-//            }
-//            return tuple2;
-//        });
+                    Optional.ofNullable(commentResult.getExecutionInfo().getPagingState())
+                            .map(PagingState::toString)
+                            .ifPresent(builder::setPagingState);
+                    responseObserver.onNext(builder.build());
+                    responseObserver.onCompleted();
+
+                    LOGGER.debug("End get video comments request");
+
+                } else if (ex != null) {
+
+                    LOGGER.error("Exception getting video comments : " + mergeStackTrace(ex));
+
+                    responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+                }
+
+            } catch (Exception exception) {
+                LOGGER.error("CATCH Exception getting video comments : " + mergeStackTrace(exception));
+            }
+
+                return commentResult;
+        });
     }
 }
