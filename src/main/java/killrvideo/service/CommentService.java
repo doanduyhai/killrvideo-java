@@ -18,6 +18,7 @@ import javax.xml.stream.events.Comment;
 import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.LocalDate;
+import com.google.common.util.concurrent.*;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
 import com.datastax.driver.mapping.Result;
@@ -278,16 +279,9 @@ public class CommentService extends AbstractCommentsService {
         }
 
         final TimeUuid startingCommentId = request.getStartingCommentId();
-        //final CompletableFuture<Tuple2<List<CommentsByVideo>, ExecutionInfo>> future;
         final Optional<String> pagingStateString = Optional
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
-        LOGGER.debug("Paging state is: " + pagingStateString.toString());
-
-        TupleType tuple2Type = session.getCluster().getMetadata()
-                .newTupleType(DataType.list(
-                        DataType.custom("CommentsByVideo")),
-                        DataType.custom("ExecutionInfo"));
 
         final ResultSetFuture future;
 
@@ -296,26 +290,10 @@ public class CommentService extends AbstractCommentsService {
          * Normally, the requested fetch size/page size is 1 to get
          * the first video comment as reference point
          */
-        //:TODO Fix this
         if (startingCommentId == null || isBlank(request.getStartingCommentId().getValue())) {
-            /*future = commentsByVideoMapper
-                    .dsl()
-                    .select()
-                    .commentid()
-                    .userid()
-                    .comment()
-                    .dateOfComment()
-                    .fromBaseTable()
-                    .where()
-                    .videoid().Eq(fromString(request.getVideoId().getValue()))
-                    .withFetchSize(request.getPageSize())
-                    .withOptionalPagingStateString(pagingStateString)
-                    .getListAsyncWithStats();*/
-
             LOGGER.debug("Query without startingCommentId");
             BuiltStatement statement = QueryBuilder
                     .select()
-                    //.all()
                     .column("videoid")
                     .column("commentid")
                     .column("userid")
@@ -327,7 +305,7 @@ public class CommentService extends AbstractCommentsService {
             statement
                     .setFetchSize(request.getPageSize());
 
-            //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambada
+            //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
             if (pagingStateString.isPresent()) {
                 statement.setPagingState(PagingState.fromString(pagingStateString.get()));
             }
@@ -340,24 +318,17 @@ public class CommentService extends AbstractCommentsService {
          * of video comments. Fetch size/page size is expected to be > 1
          */
         else {
-//            future = commentsByVideoMapper
-//                    .dsl()
-//                    .select()
-//                    .commentid()
-//                    .userid()
-//                    .comment()
-//                    .dateOfComment()
-//                    .fromBaseTable()
-//                    .where()
-//                    .videoid().Eq(fromString(request.getVideoId().getValue()))
-//                    .commentid().Lte(fromString(request.getStartingCommentId().getValue()))
-//                    .withFetchSize(request.getPageSize())
-//                    .getListAsyncWithStats();
-
+            /**
+             * Notice below I have a fcall to pull the timstamp out of the
+             * commentid timeuuid field.  This should be handled by the @Computed
+             * annotation in the CommentsByVideo entity, but it seems these only work with
+             * simple "get" statements per
+             * http://docs.datastax.com/en/drivers/java/3.1/com/datastax/driver/mapping/annotations/Computed.html
+             */
+            //:TODO See if maybe I am simply pulling "dateOfComment" incorrectly when using @Computed
             LOGGER.debug("Query WITH startingCommentId");
             BuiltStatement statement = QueryBuilder
                     .select()
-                    //.all()
                     .column("videoid")
                     .column("commentid")
                     .column("userid")
@@ -373,43 +344,40 @@ public class CommentService extends AbstractCommentsService {
             future = session.executeAsync(statement);
         }
 
-        //CompletableFuture<List<CommentsByVideo>, ExecutionInfo> test =  FutureUtils.buildCompletableFuture(future);
-        //CompletableFuture<Tuple2<List<CommentsByVideo>, ExecutionInfo>> futureTest =
-
         FutureUtils.buildCompletableFuture(future)
         .handle((commentResult, ex) -> {
             try {
-                if (commentResult != null && !commentResult.isExhausted()) {
-                    final List<CommentsByVideo> commentsList = new ArrayList<>();
-
-                    List<Row> rows = commentResult.all();
+                if (commentResult != null) {
                     final GetVideoCommentsResponse.Builder builder = GetVideoCommentsResponse.newBuilder();
-                    //Result<CommentsByVideo> comments = commentsByVideoMapper.map(commentResult);
-//                    for (CommentsByVideo comment : comments.all()) {
-//                        builder.addComments(comment.toVideoComment());
-//                        LOGGER.debug(comment.getComment());
-//                    }
-////
-                    for (Row row : rows) {
-                        CommentsByVideo wtf = new CommentsByVideo(
+
+                    /**
+                     * This.....is not how I planned to do this, but it seems the mapper
+                     * does not work when dealing with @Computed types as we are within the
+                     * CommentsByVideo entity for dateOfComment nor does the constructor
+                     * include dateOfComment.  I might simply change the constructor to include
+                     * dateOfComment, but this flies against using @Computed in the first place.
+                     * For now, this works.
+                     */
+                    //:TODO See if there is a proper way to handle @Computed 1) within the entity itself and 2) for the mapper
+                    int remaining = commentResult.getAvailableWithoutFetching();
+                    for (Row row : commentResult) {
+                        CommentsByVideo commentByVideo = new CommentsByVideo(
                                 row.getUUID(0), row.getUUID(1), row.getUUID(2), row.getString(3)
                         );
 
-                        //Date date = row.getTimestamp(4);
-                        wtf.setDateOfComment(row.getTimestamp(4));
-                        commentsList.add(wtf);
-                        LOGGER.debug(wtf.getComment());
-                        LOGGER.debug("DATEOF: " + wtf.getDateOfComment());
+                        /**
+                         * Explicitly set dateOfComment because it is not in the constructor.
+                         * This gives us the "proper" return object for the response to the front-end
+                         * UI.  It does not function if this value is null or not the correct type.
+                         */
+                        commentByVideo.setDateOfComment(row.getTimestamp(4));
+                        builder.addComments(commentByVideo.toVideoComment());
 
-                        builder.addComments(wtf.toVideoComment());
+                        if (--remaining == 0) {
+                            break;
+                        }
                     }
-//
-//
-//                    //final GetVideoCommentsResponse.Builder builder = GetVideoCommentsResponse.newBuilder();
-//                    //commentsList.forEach(comment -> builder.addComments(comment.toVideoComment()));
-//                    //comments.all().stream().forEach(comment -> builder.addComments(comment.toVideoComment()));
-//                    //comments.forEach(commentsByVideo -> builder.addComments(commentsByVideo.toVideoComment()));
-//
+
                     Optional.ofNullable(commentResult.getExecutionInfo().getPagingState())
                             .map(PagingState::toString)
                             .ifPresent(builder::setPagingState);
@@ -419,7 +387,6 @@ public class CommentService extends AbstractCommentsService {
                     LOGGER.debug("End get video comments request");
 
                 } else if (ex != null) {
-
                     LOGGER.error("Exception getting video comments : " + mergeStackTrace(ex));
 
                     responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
@@ -427,9 +394,11 @@ public class CommentService extends AbstractCommentsService {
 
             } catch (Exception exception) {
                 LOGGER.error("CATCH Exception getting video comments : " + mergeStackTrace(exception));
+
             }
 
-                return commentResult;
+            return commentResult;
+
         });
     }
 }
