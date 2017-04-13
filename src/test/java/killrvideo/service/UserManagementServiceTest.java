@@ -33,8 +33,8 @@ import com.google.common.eventbus.EventBus;
 
 //import info.archinnov.achilles.generated.ManagerFactory;
 //import info.archinnov.achilles.generated.ManagerFactoryBuilder;
-import info.archinnov.achilles.junit.AchillesTestResource;
-import info.archinnov.achilles.junit.AchillesTestResourceBuilder;
+//import info.archinnov.achilles.junit.AchillesTestResource;
+//import info.archinnov.achilles.junit.AchillesTestResourceBuilder;
 import info.archinnov.achilles.script.ScriptExecutor;
 import io.grpc.stub.StreamObserver;
 import killrvideo.entity.User;

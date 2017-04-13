@@ -30,7 +30,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 //import info.archinnov.achilles.generated.ManagerFactory;
 //import info.archinnov.achilles.generated.ManagerFactoryBuilder;
 //import info.archinnov.achilles.junit.AchillesTestResource;
-import info.archinnov.achilles.junit.AchillesTestResourceBuilder;
+//import info.archinnov.achilles.junit.AchillesTestResourceBuilder;
 import info.archinnov.achilles.type.TypedMap;
 import io.grpc.stub.StreamObserver;
 import killrvideo.comments.CommentsServiceOuterClass.*;

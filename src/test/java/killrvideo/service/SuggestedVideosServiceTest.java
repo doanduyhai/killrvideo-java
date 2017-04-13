@@ -23,8 +23,8 @@ import com.google.common.collect.ImmutableMap;
 
 //import info.archinnov.achilles.generated.ManagerFactory;
 //import info.archinnov.achilles.generated.ManagerFactoryBuilder;
-import info.archinnov.achilles.junit.AchillesTestResource;
-import info.archinnov.achilles.junit.AchillesTestResourceBuilder;
+//import info.archinnov.achilles.junit.AchillesTestResource;
+//import info.archinnov.achilles.junit.AchillesTestResourceBuilder;
 import io.grpc.stub.StreamObserver;
 import killrvideo.common.CommonTypes;
 import killrvideo.common.CommonTypes.Uuid;

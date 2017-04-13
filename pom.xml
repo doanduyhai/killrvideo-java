@@ -13,6 +13,7 @@
         <grpc.version>1.0.0</grpc.version>
         <achilles.version>5.1.5</achilles.version>
         <dse.version>1.1.1</dse.version>
+        <cassandra.version>3.2.0</cassandra.version>
         <guava.version>18.0</guava.version>
         <commons.lang3.version>3.3.2</commons.lang3.version>
         <commons-codec.version>1.10</commons-codec.version>
@@ -79,8 +80,36 @@
         capabilities we had from Achilles -->
         <dependency>
             <groupId>com.datastax.cassandra</groupId>
+            <artifactId>cassandra-driver-core</artifactId>
+            <version>${cassandra.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-handler</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.datastax.cassandra</groupId>
             <artifactId>cassandra-driver-mapping</artifactId>
-            <version>3.1.0</version>
+            <version>${cassandra.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-handler</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.datastax.cassandra</groupId>
+            <artifactId>cassandra-driver-extras</artifactId>
+            <version>${cassandra.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-handler</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Added explicit call to guava version 18 because of a conflict
@@ -195,7 +224,7 @@
             <scope>test</scope>
         </dependency>
 
-        <dependency>
+        <!-- <dependency>
             <groupId>info.archinnov</groupId>
             <artifactId>achilles-junit</artifactId>
             <version>${achilles.version}</version>
@@ -207,7 +236,7 @@
             <artifactId>achilles-embedded</artifactId>
             <version>${achilles.version}</version>
             <scope>test</scope>
-        </dependency>
+        </dependency> -->
     </dependencies>
 
     <build>
