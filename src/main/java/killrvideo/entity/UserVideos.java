@@ -44,7 +44,8 @@ public class UserVideos extends AbstractVideoList {
     public void setUserid(UUID userid) { this.userid = userid; }
 
     public VideoPreview toVideoPreview() {
-        return VideoPreview.newBuilder()
+        return VideoPreview
+                .newBuilder()
                 .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
                 .setName(name)
                 .setPreviewImageLocation(Optional

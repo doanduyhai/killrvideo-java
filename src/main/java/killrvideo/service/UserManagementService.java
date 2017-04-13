@@ -264,17 +264,16 @@ public class UserManagementService extends AbstractUserManagementService {
          * to limit the number of values inside the IN clause to a dozen
          */
         BuiltStatement bs = QueryBuilder
-                .select().all()
+                .select()
+                .all()
                 .from(Schema.KEYSPACE, usersTableName)
                 .where(QueryBuilder.in("userid", userIds));
 
         ResultSetFuture future = session.executeAsync(bs);
-        FutureUtils.buildCompletableFuture(future)
-                .handle((entities, ex) -> {
-                    Result<User> users = userMapper.map(entities);
-
+        FutureUtils.buildCompletableFuture(userMapper.mapAsync(future))
+                .handle((users, ex) -> {
                     if (users != null) {
-                        users.all().stream().forEach(user -> builder.addProfiles(user.toUserProfile()));
+                        users.forEach(user -> builder.addProfiles(user.toUserProfile()));
                         responseObserver.onNext(builder.build());
                         responseObserver.onCompleted();
 
@@ -287,7 +286,7 @@ public class UserManagementService extends AbstractUserManagementService {
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
 
                     }
-                    return entities;
+                    return users;
                 });
 
 //        BuiltStatement bs = QueryBuilder

@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import javax.validation.constraints.NotNull;
 
+import killrvideo.common.CommonTypes;
 import org.apache.commons.lang3.StringUtils;
 import org.hibernate.validator.constraints.NotBlank;
 
@@ -39,9 +40,9 @@ public class CommentsByUser {
     private String comment;
 
 //    @Column
-//    @NotNull
+    @NotNull
     //:TODO figure out to to convert Computed annotation
-    @Computed("dateOf(commentid)")
+    @Computed("toTimestamp(commentid)")
     private Date dateOfComment;
 
     public CommentsByUser() {

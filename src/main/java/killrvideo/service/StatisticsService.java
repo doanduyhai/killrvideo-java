@@ -8,10 +8,16 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.Session;
+import com.datastax.driver.core.querybuilder.BuiltStatement;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.mapping.Mapper;
+import com.datastax.driver.mapping.MappingManager;
 import com.google.common.util.concurrent.ListenableFuture;
+import killrvideo.entity.Schema;
 import killrvideo.entity.UserVideos;
 import killrvideo.entity.Video;
 import killrvideo.utils.FutureUtils;
@@ -36,20 +42,27 @@ public class StatisticsService extends AbstractStatisticsService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StatisticsService.class);
 
-    //:TODO Fix this
-    /*
-    @Inject
-    VideoPlaybackStats_Manager videoPlaybackStatsManager;
-    */
-
     @Inject
     Mapper<VideoPlaybackStats> videoPlaybackStatsMapper;
 
     @Inject
-    KillrVideoInputValidator validator;
+    MappingManager manager;
 
     @Inject
     EventBus eventBus;
+
+    @Inject
+    KillrVideoInputValidator validator;
+
+    Session session;
+    private String videoPlaybackStatsTableName;
+
+    @PostConstruct
+    public void init(){
+        this.session = manager.getSession();
+
+        videoPlaybackStatsTableName = videoPlaybackStatsMapper.getTableMetadata().getName();
+    }
 
     @Override
     public void recordPlaybackStarted(RecordPlaybackStartedRequest request, StreamObserver<RecordPlaybackStartedResponse> responseObserver) {
@@ -68,16 +81,12 @@ public class StatisticsService extends AbstractStatisticsService {
          * a mutation log file for later replay by another
          * micro-service
          */
-        //:TODO Fix this
-        /*
-        videoPlaybackStatsManager
-                .dsl()
-                .update()
-                .fromBaseTable()
-                .views().Incr()
-                .where()
-                .videoid().Eq(videoId)
-                .executeAsync()
+        BuiltStatement statement = QueryBuilder
+                .update(Schema.KEYSPACE, videoPlaybackStatsTableName)
+                .with(QueryBuilder.incr("views"))
+                .where(QueryBuilder.eq("videoid", videoId));
+
+        FutureUtils.buildCompletableFuture(session.executeAsync(statement))
                 .handle((rs, ex) -> {
                     if (rs != null) {
                         responseObserver.onNext(RecordPlaybackStartedResponse.newBuilder().build());
@@ -94,7 +103,6 @@ public class StatisticsService extends AbstractStatisticsService {
                     }
                     return rs;
                 });
-        */
     }
 
     @Override
@@ -106,19 +114,6 @@ public class StatisticsService extends AbstractStatisticsService {
         if (!validator.isValid(request, responseObserver)) {
             return;
         }
-
-        //:TODO Fix this
-        /*
-        final List<CompletableFuture<VideoPlaybackStats>> statsFuture = request
-                .getVideoIdsList()
-                .stream()
-                .map(uuid -> UUID.fromString(uuid.getValue()))
-                .map(uuid -> videoPlaybackStatsManager.crud().findById(uuid).getAsync())
-                .collect(toList());
-
-        final GetNumberOfPlaysResponse.Builder builder = GetNumberOfPlaysResponse
-                .newBuilder();
-        */
 
         //:TODO Determine that buildCompletableFuture(uuid) below does what we think it does
         final List<CompletableFuture<VideoPlaybackStats>> statsFuture = request

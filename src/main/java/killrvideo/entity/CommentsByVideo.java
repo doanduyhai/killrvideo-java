@@ -41,7 +41,7 @@ public class CommentsByVideo {
 //    @Column
     //:TODO figure out to to convert Computed annotation
     //@Computed(function = "toTimestamp", targetColumns = {"commentid"}, alias = "comment_timestamp", cqlClass = Date.class)
-    @Computed("dateOf(commentid)")
+    @Computed("toTimestamp(commentid)")
     private Date dateOfComment;
 
     public CommentsByVideo() {

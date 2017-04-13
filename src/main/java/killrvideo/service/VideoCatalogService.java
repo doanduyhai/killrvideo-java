@@ -346,7 +346,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         LOGGER.debug("-----Start getting video preview-----");
 
         if (!validator.isValid(request, responseObserver)) {
-            LOGGER.debug("Video request IS VALID");
             return;
         }
 
@@ -364,12 +363,12 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         /**
          * Fire a list of async SELECT, one for each video id
          */
-        /* final List<CompletableFuture<Video>> listFuture = request
-                .getVideoIdsList()
-                .stream()
-                .map(uuid -> UUID.fromString(uuid.getValue()))
-                .map(uuid -> videoManager.crud().findById(uuid).getAsync())
-                .collect(toList()); */
+//        final List<CompletableFuture<Video>> listFuture = request
+//                .getVideoIdsList()
+//                .stream()
+//                .map(uuid -> UUID.fromString(uuid.getValue()))
+//                .map(uuid -> videoManager.crud().findById(uuid).getAsync())
+//                .collect(toList());
 
         /**
          * Merge all the async SELECT results
@@ -398,15 +397,53 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 //                    return list;
 //                });
 
-        LOGGER.debug("videoIdsList is: " + request.getVideoIdsList().toString());
+//        LOGGER.debug("videoIdsList is: " + request.getVideoIdsList().toString());
+//        LOGGER.debug("videoIdsList is: " + request.getVideoIdsList().get(0).getValue());
+//        List<UUID> ids = new ArrayList<>(0);
+//        ids.add(UUID.fromString("d4ae7bef-8b5a-4342-b4c5-caa2f71e15e1"));
 
-        final List<ListenableFuture<Video>> listFuture = request
+        try {
+//            final List<CompletableFuture<Video>> listFuture = ids
+//                    .stream()
+//                    .map(uuid -> FutureUtils.buildCompletableFuture(videoMapper.getAsync(uuid)))
+//                    .collect(toList());
+
+        final List<CompletableFuture<Video>> listFuture = request
                 .getVideoIdsList()
                 .stream()
                 .map(uuid -> UUID.fromString(uuid.getValue()))
-                .map(uuid -> videoMapper.getAsync(uuid))
+                .map(uuid -> FutureUtils.buildCompletableFuture(videoMapper.getAsync(uuid)))
                 .collect(toList());
 
+            CompletableFuture
+                    .allOf(listFuture.toArray(new CompletableFuture[listFuture.size()]))
+                    .thenApply(v -> listFuture.stream().map(CompletableFuture::join).collect(toList()))
+                    .handle((list, ex) -> {
+                        if (list != null) {
+                            list.stream()
+                                    .filter(x -> x != null)
+                                    .forEach(entity -> builder.addVideoPreviews(entity.toVideoPreview()));
+
+                            responseObserver.onNext(builder.build());
+                            responseObserver.onCompleted();
+
+                            LOGGER.debug("End getting video preview");
+
+                        } else if (ex != null) {
+
+                            LOGGER.error("Exception getting video preview : " + mergeStackTrace(ex));
+
+                            responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
+                        }
+                        return list;
+                    });
+
+        } catch (Exception ex) {
+            LOGGER.error("Exception getting video preview : " + mergeStackTrace(ex));
+
+            responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+        }
 //        BuiltStatement bs = QueryBuilder
 //                .select().all()
 //                .from(Schema.KEYSPACE,"users")
@@ -566,7 +603,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     bound
                             .setFetchSize(recordsStillNeeded);
 
-                    //:TODO Figure out more streamlined way to do this with Optional and java 8 lambada
+                    //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
                     if (pagingStateString.isPresent()) {
                         bound.setPagingState(PagingState.fromString(pagingStateString.get()));
                     }
@@ -710,7 +747,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
             bound
                     .setFetchSize(request.getPageSize());
 
-            //:TODO Figure out more streamlined way to do this with Optional and java 8 lambada
+            //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
             if (pagingStateString.isPresent()) {
                 bound.setPagingState(PagingState.fromString(pagingStateString.get()));
             }
@@ -720,30 +757,46 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
             LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
         }
 
-        FutureUtils.buildCompletableFuture(future)
-        //listAsync
-                .handle((entity, ex) -> {
-                    Result<UserVideos> userVideos = userVideosMapper.map(entity);
 
-                    if (userVideos != null) {
-                        final GetUserVideoPreviewsResponse.Builder builder = GetUserVideoPreviewsResponse.newBuilder();
-                        userVideos.all().stream().forEach(userVideo -> builder.addVideoPreviews(userVideo.toVideoPreview()));
-                        builder.setUserId(request.getUserId());
-                        Optional.ofNullable(userVideos.getExecutionInfo().getPagingState())
-                                .map(PagingState::toString)
-                                .ifPresent(builder::setPagingState);
-                        responseObserver.onNext(builder.build());
-                        responseObserver.onCompleted();
+        FutureUtils.buildCompletableFuture(userVideosMapper.mapAsync(future))
+                .handle((userVideos, ex) -> {
+                    try {
 
-                        LOGGER.debug("End getting user video preview");
+                        if (userVideos != null) {
+                            final GetUserVideoPreviewsResponse.Builder builder = GetUserVideoPreviewsResponse.newBuilder();
 
-                    } else if (ex != null) {
-                        LOGGER.error("Exception getting user video preview : " + mergeStackTrace(ex));
+                            int remaining = userVideos.getAvailableWithoutFetching();
+                            for (UserVideos userVideo : userVideos) {
+                                builder.addVideoPreviews(userVideo.toVideoPreview());
+                                builder.setUserId(request.getUserId());
 
-                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+                                if (--remaining == 0) {
+                                    break;
+                                }
+                            }
 
+                            Optional.ofNullable(userVideos.getExecutionInfo().getPagingState())
+                                    .map(PagingState::toString)
+                                    .ifPresent(builder::setPagingState);
+                            responseObserver.onNext(builder.build());
+                            responseObserver.onCompleted();
+
+                            LOGGER.debug("End getting user video preview");
+
+                        } else if (ex != null) {
+                            LOGGER.error("Exception getting user video preview : " + mergeStackTrace(ex));
+
+                            responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
+                        }
+
+                    } catch (Exception e) {
+                        LOGGER.error("Exception CATCH getting user video preview : " + mergeStackTrace(e));
+
+                        responseObserver.onError(Status.INTERNAL.withCause(e).asRuntimeException());
                     }
-                    return entity;
+                    return userVideos;
+
                 });
     }
 
