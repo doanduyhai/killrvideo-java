@@ -34,11 +34,9 @@ public class DSEConfiguration {
 //
     @Bean
     public Mapper<LatestVideos> latestVideosMapper() { return manager.mapper(LatestVideos.class); }
-//
-//    @Bean
-//    public TagsByLetter_Manager tagsByLetterManager() {
-//        return managerFactory.forTagsByLetter();
-//    }
+
+    @Bean
+    public Mapper<TagsByLetter> tagsByLetterMapper() { return manager.mapper(TagsByLetter.class); }
 //
 //    @Bean
 //    public UploadedVideoDestinations_Manager uploadedVideoDestinationsManager() {
