@@ -34,7 +34,7 @@ public class VideoAddedHandlers {
     private static Logger LOGGER = LoggerFactory.getLogger(VideoAddedHandlers.class);
 
     @Inject
-    Mapper<VideoByTag> videoByTagMapper;
+    Mapper<VideoByTag> videosByTagMapper;
 
     @Inject
     Mapper<TagsByLetter> tagsByLetterMapper;
@@ -72,8 +72,8 @@ public class VideoAddedHandlers {
 
             //:TODO Make these prepared statements
             batchStatement.add(
-                    videoByTagMapper.saveQuery(
-                            new VideoByTag(tag, videoId, userId, name, previewImageLocation, addedDate, taggedDate)
+                    videosByTagMapper.saveQuery(
+                            new VideoByTag(tag, videoId, userId, name, previewImageLocation, taggedDate, addedDate)
                     ));
 
             batchStatement.add(

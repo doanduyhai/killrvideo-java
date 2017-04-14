@@ -3,8 +3,19 @@ package killrvideo.service;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.Session;
+import com.datastax.driver.core.querybuilder.BuiltStatement;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.mapping.Mapper;
+import com.datastax.driver.mapping.MappingManager;
+import killrvideo.entity.Schema;
+import killrvideo.entity.TagsByLetter;
+import killrvideo.entity.VideoByTag;
+import killrvideo.utils.FutureUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,8 +23,6 @@ import org.springframework.stereotype.Service;
 
 import com.datastax.driver.core.PagingState;
 
-//import info.archinnov.achilles.generated.manager.TagsByLetter_Manager;
-//import info.archinnov.achilles.generated.manager.VideoByTag_Manager;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import killrvideo.search.SearchServiceGrpc.AbstractSearchService;
@@ -28,25 +37,36 @@ public class SearchService extends AbstractSearchService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SearchService.class);
 
-    //:TODO Fix this
-    /*
     @Inject
-    VideoByTag_Manager videoByTagManager;
+    Mapper<VideoByTag> videosByTagMapper;
 
     @Inject
-    TagsByLetter_Manager tagsByLetterManager;
-    */
+    Mapper<TagsByLetter> tagsByLetterMapper;
+
+    @Inject
+    MappingManager manager;
 
     @Inject
     KillrVideoInputValidator validator;
+
+    private Session session;
+    private String tagsByLetterTableName;
+    private String videosByTagTableName;
+
+    @PostConstruct
+    public void init() {
+        this.session = manager.getSession();
+
+        tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
+        videosByTagTableName = videosByTagMapper.getTableMetadata().getName();
+
+    }
 
     @Override
     public void searchVideos(SearchVideosRequest request, StreamObserver<SearchVideosResponse> responseObserver) {
 
         LOGGER.debug("Start searching video by tag");
 
-        //:TODO Fix this
-        /*
         if (!validator.isValid(request, responseObserver)) {
             return;
         }
@@ -55,21 +75,36 @@ public class SearchService extends AbstractSearchService {
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
 
-        videoByTagManager
-                .dsl()
+        BuiltStatement statement = QueryBuilder
                 .select()
-                .allColumns_FromBaseTable()
-                .where()
-                .tag().Eq(request.getQuery())
-                .withFetchSize(request.getPageSize())
-                .withOptionalPagingStateString(pagingState)
-                .getListAsyncWithStats()
-                .handle((tuple2, ex) -> {
-                    if (tuple2 != null) {
+                .all()
+                .from(Schema.KEYSPACE, videosByTagTableName)
+                .where(QueryBuilder.eq("tag", request.getQuery()));
+
+        statement
+                .setFetchSize(request.getPageSize());
+
+        //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
+        if (pagingState.isPresent()) {
+            statement.setPagingState(PagingState.fromString(pagingState.get()));
+        }
+
+        FutureUtils.buildCompletableFuture(videosByTagMapper.mapAsync(session.executeAsync(statement)))
+                .handle((videos, ex) -> {
+                    if (videos != null) {
                         final SearchVideosResponse.Builder builder = SearchVideosResponse.newBuilder();
                         builder.setQuery(request.getQuery());
-                        tuple2._1().stream().forEach(entity -> builder.addVideos(entity.toResultVideoPreview()));
-                        Optional.ofNullable(tuple2._2().getPagingState())
+
+                        int remaining = videos.getAvailableWithoutFetching();
+                        for (VideoByTag video : videos) {
+                            builder.addVideos(video.toResultVideoPreview());
+
+                            if (--remaining == 0) {
+                                break;
+                            }
+                        }
+
+                        Optional.ofNullable(videos.getExecutionInfo().getPagingState())
                                 .map(PagingState::toString)
                                 .ifPresent(builder::setPagingState);
                         responseObserver.onNext(builder.build());
@@ -83,9 +118,8 @@ public class SearchService extends AbstractSearchService {
 
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
                     }
-                    return tuple2;
+                    return videos;
                 });
-        */
     }
 
     @Override
@@ -93,26 +127,33 @@ public class SearchService extends AbstractSearchService {
 
         LOGGER.debug("Start getting query suggestions by tag");
 
-        //:TODO Fix this
-        /*
         if (!validator.isValid(request, responseObserver)) {
             return;
         }
 
-        tagsByLetterManager
-                .dsl()
+        BuiltStatement statement = QueryBuilder
                 .select()
-                .tag()
-                .fromBaseTable()
-                .where()
-                .firstLetter().Eq(request.getQuery().substring(0, 1))
-                .tag().Gte(request.getQuery())
-                .withFetchSize(request.getPageSize())
-                .getListAsync()
-                .handle((entities, ex) -> {
-                    if (entities != null) {
+                .from(Schema.KEYSPACE, tagsByLetterTableName)
+                .where(QueryBuilder.eq("first_letter", request.getQuery().substring(0, 1)))
+                .and(QueryBuilder.gte("tag", request.getQuery()));
+
+        statement
+                .setFetchSize(request.getPageSize());
+
+        FutureUtils.buildCompletableFuture(tagsByLetterMapper.mapAsync(session.executeAsync(statement)))
+                .handle((tags, ex) -> {
+                    if (tags != null) {
                         final GetQuerySuggestionsResponse.Builder builder = GetQuerySuggestionsResponse.newBuilder();
-                        entities.stream().forEach(entity -> builder.addSuggestions(entity.getTag()));
+
+                        int remaining = tags.getAvailableWithoutFetching();
+                        for (TagsByLetter tag : tags) {
+                            builder.addSuggestions(tag.getTag());
+
+                            if (--remaining == 0) {
+                                break;
+                            }
+                        }
+
                         builder.setQuery(request.getQuery());
                         responseObserver.onNext(builder.build());
                         responseObserver.onCompleted();
@@ -120,14 +161,12 @@ public class SearchService extends AbstractSearchService {
                         LOGGER.debug("End getting query suggestions by tag");
 
                     } else if (ex != null) {
-
                         LOGGER.error("Exception getting query suggestions by tag : " + mergeStackTrace(ex));
 
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
                     }
-                    return entities;
+                    return tags;
                 });
-        */
     }
 
 }
