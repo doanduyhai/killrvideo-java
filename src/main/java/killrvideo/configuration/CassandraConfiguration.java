@@ -73,7 +73,8 @@ public class CassandraConfiguration {
 
             final Session session = cluster.connect();
 
-            maybeCreateSchema(session);
+            //:TODO We should no longer need to do this, putting this here as a check
+            //maybeCreateSchema(session);
 
             final MappingManager manager = new MappingManager(session);
             LOGGER.info(String.format("Creating mapping manager %s", manager));

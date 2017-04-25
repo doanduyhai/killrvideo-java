@@ -23,7 +23,7 @@ public class UserCredentials {
     private String email;
 
     @NotBlank
-    @Column(name = "pass")
+    @Column(name = "password")
     private String password;
 
     @NotNull

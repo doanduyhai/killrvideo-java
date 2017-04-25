@@ -113,7 +113,7 @@ public class UserManagementService extends AbstractUserManagementService {
         BuiltStatement checkEmailQuery = QueryBuilder
                 .insertInto(Schema.KEYSPACE, userCredentialsTableName)
                 .value("email", email)
-                .value("pass", hashedPassword)
+                .value("password", hashedPassword)
                 .value("userid", userId)
                 .ifNotExists(); // use lightweight transaction
 
