@@ -68,31 +68,31 @@ public class VideoAddedHandlers {
 
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
 
-        tags.forEach(tag -> {
-
-            //:TODO Make these prepared statements
-            batchStatement.add(
-                    videosByTagMapper.saveQuery(
-                            new VideoByTag(tag, videoId, userId, name, previewImageLocation, taggedDate, addedDate)
-                    ));
-
-            batchStatement.add(
-                    tagsByLetterMapper.saveQuery(
-                            new TagsByLetter(tag.substring(0,1), tag)
-                    ));
-        });
-
-        batchStatement.setDefaultTimestamp(taggedDate.getTime());
-
-        FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
-            .handle((rs, ex) -> {
-                if (rs != null) {
-                    LOGGER.debug("End handling YouTubeVideoAdded");
-                }
-                if (ex != null) {
-
-                }
-                return rs;
-            });
+//        tags.forEach(tag -> {
+//
+//            //:TODO Make these prepared statements
+//            batchStatement.add(
+//                    videosByTagMapper.saveQuery(
+//                            new VideoByTag(tag, videoId, userId, name, previewImageLocation, taggedDate, addedDate)
+//                    ));
+//
+//            batchStatement.add(
+//                    tagsByLetterMapper.saveQuery(
+//                            new TagsByLetter(tag.substring(0,1), tag)
+//                    ));
+//        });
+//
+//        batchStatement.setDefaultTimestamp(taggedDate.getTime());
+//
+//        FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
+//            .handle((rs, ex) -> {
+//                if (rs != null) {
+//                    LOGGER.debug("End handling YouTubeVideoAdded");
+//                }
+//                if (ex != null) {
+//
+//                }
+//                return rs;
+//            });
     }
 }
