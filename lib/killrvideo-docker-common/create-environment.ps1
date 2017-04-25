@@ -27,7 +27,7 @@ Param (
 
     [Parameter(Mandatory=$false)]
     [string]
-    $ProjectName = 'killrvideo',
+    $ProjectName = 'killrvideo_java',
 
     [Parameter(Mandatory=$false)]
     [switch]
