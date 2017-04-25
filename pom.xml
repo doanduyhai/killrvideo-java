@@ -250,6 +250,7 @@
                 <artifactId>protobuf-maven-plugin</artifactId>
                 <version>0.5.0</version>
                 <configuration>
+                    <protoSourceRoot>${basedir}/lib/killrvideo-service-protos/src</protoSourceRoot>
                     <!--
                       The version of protoc must match protobuf-java. If you don't depend on
                       protobuf-java directly, you will be transitively depending on the

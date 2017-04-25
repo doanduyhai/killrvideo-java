@@ -155,36 +155,3 @@ CREATE TABLE IF NOT EXISTS killrvideo.encoding_job_notifications (
     PRIMARY KEY (videoid, status_date, etag)
 ) WITH CLUSTERING ORDER BY (status_date DESC, etag ASC);
 
-CREATE TABLE IF NOT EXISTS killrvideo.sample_data_job_log (
-    job_name text,
-    scheduled_run_time timestamp,
-    actual_run_time timestamp,
-    PRIMARY KEY (job_name, scheduled_run_time, actual_run_time)
-) WITH CLUSTERING ORDER BY (scheduled_run_time DESC, actual_run_time DESC)
-  AND default_time_to_live = 1209600;
-
-CREATE TABLE IF NOT EXISTS killrvideo.sample_data_leases (
-    name text,
-    owner text,
-    PRIMARY KEY (name)
-) WITH default_time_to_live = 180;
-
-CREATE TABLE IF NOT EXISTS killrvideo.sample_data_users (
-    userid uuid,
-    PRIMARY KEY(userid)
-);
-
-CREATE TABLE IF NOT EXISTS killrvideo.sample_data_videos (
-    videoid uuid,
-    PRIMARY KEY (videoid)
-);
-
-CREATE TABLE IF NOT EXISTS killrvideo.sample_data_youtube_videos (
-    sourceid text,
-    published_at timestamp,
-    youtube_video_id text,
-    name text,
-    description text,
-    used boolean,
-    PRIMARY KEY (sourceid, published_at, youtube_video_id)
-) WITH CLUSTERING ORDER BY (published_at DESC, youtube_video_id ASC);
