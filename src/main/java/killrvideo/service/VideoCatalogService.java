@@ -28,10 +28,7 @@ import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.mapping.Result;
 import com.google.common.reflect.TypeToken;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.*;
 import com.sun.org.apache.bcel.internal.generic.LOOKUPSWITCH;
 import killrvideo.entity.*;
 import killrvideo.utils.FutureUtils;
@@ -621,6 +618,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
                 }
 
+                //Result<LatestVideos> videos = latestVideosMapper.map(Uninterruptibles.getUninterruptibly(future));
                 Result<LatestVideos> videos = latestVideosMapper.map(futureResults);
                 results.addAll(videos.all()
                         .stream()
@@ -628,6 +626,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         .collect(toList()));
 
                 final ExecutionInfo executionInfo = videos.getExecutionInfo();
+                //final ExecutionInfo executionInfo = futureResults.getExecutionInfo();
 
                 // See if we can stop querying
                 if (results.size() >= request.getPageSize()) {
