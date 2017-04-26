@@ -8,24 +8,23 @@ import java.util.concurrent.ExecutorService;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
-import killrvideo.entity.LatestVideos;
+import com.datastax.driver.core.BatchStatement;
+import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.core.Session;
+import killrvideo.entity.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.datastax.driver.core.BatchStatement;
-import com.datastax.driver.core.Session;
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.Subscribe;
 
-//import info.archinnov.achilles.generated.manager.TagsByLetter_Manager;
-//import info.archinnov.achilles.generated.manager.VideoByTag_Manager;
 import killrvideo.entity.TagsByLetter;
 import killrvideo.entity.VideoByTag;
 import killrvideo.utils.FutureUtils;
-import killrvideo.video_catalog.events.VideoCatalogEvents;
 import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
 
 @Component
@@ -46,11 +45,28 @@ public class VideoAddedHandlers {
     ExecutorService executorService;
 
     private Session session;
+    private String videosByTagTableName;
+    private String tagsByLetterTableName;
+    private PreparedStatement videosByTagPrepared;
+    private PreparedStatement tagsByLetterPrepared;
 
     @PostConstruct
     public void init() {
         this.session = manager.getSession();
 
+        videosByTagTableName = videosByTagMapper.getTableMetadata().getName();
+        tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
+
+        // Prepared statements for handle()
+        videosByTagPrepared = session.prepare(
+                "INSERT INTO " + Schema.KEYSPACE + ".videos_by_tag " +
+                        "(tag, videoid, added_date, userid, name, preview_image_location, tagged_date) " +
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)"
+        );
+
+        tagsByLetterPrepared = session.prepare(
+                "INSERT INTO " + Schema.KEYSPACE + ".tags_by_letter (first_letter, tag) VALUES (?, ?)"
+        );
     }
 
     @Subscribe
@@ -68,31 +84,30 @@ public class VideoAddedHandlers {
 
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
 
-//        tags.forEach(tag -> {
-//
-//            //:TODO Make these prepared statements
-//            batchStatement.add(
-//                    videosByTagMapper.saveQuery(
-//                            new VideoByTag(tag, videoId, userId, name, previewImageLocation, taggedDate, addedDate)
-//                    ));
-//
-//            batchStatement.add(
-//                    tagsByLetterMapper.saveQuery(
-//                            new TagsByLetter(tag.substring(0,1), tag)
-//                    ));
-//        });
-//
-//        batchStatement.setDefaultTimestamp(taggedDate.getTime());
-//
-//        FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
-//            .handle((rs, ex) -> {
-//                if (rs != null) {
-//                    LOGGER.debug("End handling YouTubeVideoAdded");
-//                }
-//                if (ex != null) {
-//
-//                }
-//                return rs;
-//            });
+        tags.forEach(tag -> {
+            BoundStatement videosByTagBound = videosByTagPrepared.bind(
+                    tag, videoId, addedDate, userId, name, previewImageLocation, taggedDate
+            );
+
+            BoundStatement tagsByLetterBound = tagsByLetterPrepared.bind(
+                    tag.substring(0,1), tag
+            );
+
+            batchStatement.add(videosByTagBound);
+            batchStatement.add(tagsByLetterBound);
+        });
+
+        batchStatement.setDefaultTimestamp(taggedDate.getTime());
+
+        FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
+            .handle((rs, ex) -> {
+                if (rs != null) {
+                    LOGGER.debug("End handling YouTubeVideoAdded");
+                }
+                if (ex != null) {
+
+                }
+                return rs;
+            });
     }
 }
