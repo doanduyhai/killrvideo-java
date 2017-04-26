@@ -48,7 +48,7 @@ public class CommentsByUser {
     public CommentsByUser() {
     }
 
-    public CommentsByUser(UUID userid, UUID videoid, UUID commentid, String comment) {
+    public CommentsByUser(UUID userid, UUID commentid, UUID videoid, String comment) {
         this.userid = userid;
         this.commentid = commentid;
         this.videoid = videoid;

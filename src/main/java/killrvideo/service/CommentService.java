@@ -21,6 +21,7 @@ import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
 import com.datastax.driver.mapping.Result;
 
+import killrvideo.common.CommonTypes;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +36,7 @@ import killrvideo.comments.CommentsServiceGrpc.AbstractCommentsService;
 import killrvideo.comments.CommentsServiceOuterClass.*;
 import killrvideo.comments.events.CommentsEvents.UserCommentedOnVideo;
 import killrvideo.common.CommonTypes.TimeUuid;
+import killrvideo.common.CommonTypes.Uuid;
 import killrvideo.entity.CommentsByVideo;
 import killrvideo.entity.CommentsByUser;
 import killrvideo.entity.Schema;
@@ -95,7 +97,7 @@ public class CommentService extends AbstractCommentsService {
         final String comment = request.getComment();
 
         final Statement s1 = commentsByUserMapper
-                .saveQuery(new CommentsByUser(userId, videoId, commentId, comment));
+                .saveQuery(new CommentsByUser(userId, commentId, videoId, comment));
 
         final Statement s2 = commentsByVideoMapper
                 .saveQuery(new CommentsByVideo(videoId, commentId, userId, comment));
@@ -145,6 +147,7 @@ public class CommentService extends AbstractCommentsService {
         }
 
         final TimeUuid startingCommentId = request.getStartingCommentId();
+        final Uuid userId = request.getUserId();
         final Optional<String> pagingStateString = Optional
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
@@ -157,20 +160,6 @@ public class CommentService extends AbstractCommentsService {
          * the first user comment as reference point
          */
         if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
-//            future = commentsByUserManager
-//                    .dsl()
-//                    .select()
-//                    .commentid()
-//                    .videoid()
-//                    .comment()
-//                    .dateOfComment()
-//                    .fromBaseTable()
-//                    .where()
-//                    .userid().Eq(fromString(request.getUserId().getValue()))
-//                    .withFetchSize(request.getPageSize())
-//                    .withOptionalPagingStateString(pagingStateString)
-//                    .getListAsyncWithStats();
-
             LOGGER.debug("Query without startingCommentId");
             BuiltStatement statement = QueryBuilder
                     .select()
@@ -180,12 +169,12 @@ public class CommentService extends AbstractCommentsService {
                     .column("comment")
                     .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
                     .from(Schema.KEYSPACE, commentsByUserTableName)
-                    .where(QueryBuilder.eq("userid", fromString(request.getUserId().getValue())));
+                    .where(QueryBuilder.eq("userid", fromString(userId.getValue())));
 
             statement
                     .setFetchSize(request.getPageSize());
 
-            //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambada
+            //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
             if (pagingStateString.isPresent()) {
                 statement.setPagingState(PagingState.fromString(pagingStateString.get()));
             }
@@ -197,22 +186,7 @@ public class CommentService extends AbstractCommentsService {
          * Subsequent requests always provide startingCommentId to load page
          * of user comments. Fetch size/page size is expected to be > 1
          */
-        //:TODO Fix this
         else {
-//            future = commentsByUserManager
-//                    .dsl()
-//                    .select()
-//                    .commentid()
-//                    .videoid()
-//                    .comment()
-//                    .dateOfComment()
-//                    .fromBaseTable()
-//                    .where()
-//                    .userid().Eq(fromString(request.getUserId().getValue()))
-//                    .commentid().Lte(fromString(request.getStartingCommentId().getValue()))
-//                    .withFetchSize(request.getPageSize())
-//                    .getListAsyncWithStats();
-
             LOGGER.debug("Query WITH startingCommentId");
             BuiltStatement statement = QueryBuilder
                     .select()
@@ -222,8 +196,8 @@ public class CommentService extends AbstractCommentsService {
                     .column("comment")
                     .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
                     .from(Schema.KEYSPACE, commentsByUserTableName)
-                    .where(QueryBuilder.eq("userid", fromString(request.getUserId().getValue())));
-                    //.and(QueryBuilder.lte("commentid", fromString(request.getStartingCommentId().getValue())));
+                    .where(QueryBuilder.eq("userid", fromString(userId.getValue())))
+                    .and(QueryBuilder.lte("commentid", fromString(startingCommentId.getValue())));
 
             statement
                     .setFetchSize(request.getPageSize());
@@ -241,7 +215,8 @@ public class CommentService extends AbstractCommentsService {
                             int remaining = commentResult.getAvailableWithoutFetching();
                             for (Row row : commentResult) {
                                 CommentsByUser commentByUser = new CommentsByUser(
-                                        row.getUUID(0), row.getUUID(1), row.getUUID(2), row.getString(3)
+                                        row.getUUID("userid"), row.getUUID("commentid"),
+                                        row.getUUID("videoid"), row.getString("comment")
                                 );
 
                                 /**
@@ -249,7 +224,7 @@ public class CommentService extends AbstractCommentsService {
                                  * This gives us the "proper" return object for the response to the front-end
                                  * UI.  It does not function if this value is null or not the correct type.
                                  */
-                                commentByUser.setDateOfComment(row.getTimestamp(4));
+                                commentByUser.setDateOfComment(row.getTimestamp("comment_timestamp"));
                                 builder.addComments(commentByUser.toUserComment());
 
                                 if (--remaining == 0) {
@@ -279,29 +254,6 @@ public class CommentService extends AbstractCommentsService {
                     return commentResult;
 
                 });
-
-//        FutureUtils.buildCompletableFuture(future)
-//                .handle((commentResult, ex) -> {
-//                    Result<CommentsByUser> comments = commentsByUserMapper.map(commentResult);
-//
-//                    if(comments != null) {
-//                        final GetUserCommentsResponse.Builder builder = GetUserCommentsResponse.newBuilder();
-//                        comments.all().forEach(commentsByUser-> builder.addComments(commentsByUser.toUserComment()));
-//                        Optional.ofNullable(comments.getExecutionInfo().getPagingState())
-//                                .map(PagingState::toString)
-//                                .ifPresent(builder::setPagingState);
-//                        responseObserver.onNext(builder.build());
-//                        responseObserver.onCompleted();
-//
-//                        LOGGER.debug("End get user comments request");
-//
-//                    } else if (ex != null) {
-//                        LOGGER.error("Exception getting user comments : " + mergeStackTrace(ex));
-//
-//                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-//                    }
-//                    return commentResult;
-//                });
     }
 
     @Override
@@ -314,6 +266,7 @@ public class CommentService extends AbstractCommentsService {
         }
 
         final TimeUuid startingCommentId = request.getStartingCommentId();
+        final Uuid videoId = request.getVideoId();
         final Optional<String> pagingStateString = Optional
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
@@ -325,7 +278,7 @@ public class CommentService extends AbstractCommentsService {
          * Normally, the requested fetch size/page size is 1 to get
          * the first video comment as reference point
          */
-        if (startingCommentId == null || isBlank(request.getStartingCommentId().getValue())) {
+        if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
             LOGGER.debug("Query without startingCommentId");
             BuiltStatement statement = QueryBuilder
                     .select()
@@ -335,7 +288,7 @@ public class CommentService extends AbstractCommentsService {
                     .column("comment")
                     .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
                     .from(Schema.KEYSPACE, commentsByVideoTableName)
-                    .where(QueryBuilder.eq("videoid", fromString(request.getVideoId().getValue())));
+                    .where(QueryBuilder.eq("videoid", fromString(videoId.getValue())));
 
             statement
                     .setFetchSize(request.getPageSize());
@@ -370,8 +323,8 @@ public class CommentService extends AbstractCommentsService {
                     .column("comment")
                     .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
                     .from(Schema.KEYSPACE, commentsByVideoTableName)
-                    .where(QueryBuilder.eq("videoid", fromString(request.getVideoId().getValue())))
-                    .and(QueryBuilder.lte("commentid", fromString(request.getStartingCommentId().getValue())));
+                    .where(QueryBuilder.eq("videoid", fromString(videoId.getValue())))
+                    .and(QueryBuilder.lte("commentid", fromString(startingCommentId.getValue())));
 
             statement
                     .setFetchSize(request.getPageSize());
@@ -397,7 +350,8 @@ public class CommentService extends AbstractCommentsService {
                     int remaining = commentResult.getAvailableWithoutFetching();
                     for (Row row : commentResult) {
                         CommentsByVideo commentByVideo = new CommentsByVideo(
-                                row.getUUID(0), row.getUUID(1), row.getUUID(2), row.getString(3)
+                                row.getUUID("videoid"), row.getUUID("commentid"),
+                                row.getUUID("userid"), row.getString("comment")
                         );
 
                         /**
@@ -409,7 +363,7 @@ public class CommentService extends AbstractCommentsService {
                          * https://docs.datastax.com/en/developer/java-driver/3.1/manual/paging/
                          */
                         //:TODO ensure to comment on the paging link as stated above
-                        commentByVideo.setDateOfComment(row.getTimestamp(4));
+                        commentByVideo.setDateOfComment(row.getTimestamp("comment_timestamp"));
                         builder.addComments(commentByVideo.toVideoComment());
 
                         if (--remaining == 0) {
