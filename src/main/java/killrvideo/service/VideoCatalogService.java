@@ -160,23 +160,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
         final UUID userId = UUID.fromString(request.getUserId().getValue());
 
-        /*final BoundStatement bs1 = videoManager
-                .crud()
-                .insert(new Video(videoId, userId, request.getName(), request.getDescription(), location,
-                        VideoLocationType.YOUTUBE.ordinal(), previewImageLocation, Sets.newHashSet(request.getTagsList().iterator()), now))
-                .generateAndGetBoundStatement();
-
-        final BoundStatement bs2 = userVideosManager
-                .crud()
-                .insert(new UserVideos(userId, videoId, request.getName(), previewImageLocation, now))
-                .generateAndGetBoundStatement();
-
-        final BoundStatement bs3 = latestVideosManager
-                .crud()
-                .insert(new LatestVideos(yyyyMMdd, userId, videoId, request.getName(), previewImageLocation, now))
-                .usingTimeToLive(LATEST_VIDEOS_TTL_SECONDS)
-                .generateAndGetBoundStatement();*/
-
         final Statement s1 = videoMapper
                 .saveQuery(new Video(videoId, userId, request.getName(), request.getDescription(), location,
                         VideoLocationType.YOUTUBE.ordinal(), previewImageLocation, Sets.newHashSet(request.getTagsList().iterator()), now));
@@ -199,7 +182,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         ResultSetFuture batchResultsFuture = session.executeAsync(batchStatement);
         FutureUtils.buildCompletableFuture(batchResultsFuture)
-        //toCompletableFuture(session.executeAsync(batchStatement), executorService)
                 .handle((rs, ex) -> {
                     if (rs != null) {
                         /**
