@@ -38,6 +38,7 @@ public class CassandraConfiguration {
     @Inject
     EtcdClient etcdClient;
 
+    //:TODO Figure out correct shutdown method
     //@Bean(destroyMethod = "shutDown")
     @Bean
     public MappingManager cassandraNativeClusterProduction() {
@@ -90,12 +91,12 @@ public class CassandraConfiguration {
         }
     }
 
-    private void maybeCreateSchema(Session session) {
-        //:TODO Figure out how to replace ScriptExecutor, maybe
-        LOGGER.info("Execute schema creation script 'schema.cql' if necessary");
-        final ScriptExecutor scriptExecutor = new ScriptExecutor(session);
-        scriptExecutor.executeScript("schema.cql");
-    }
+//    private void maybeCreateSchema(Session session) {
+//        //:TODO Figure out how to replace ScriptExecutor, maybe
+//        LOGGER.info("Execute schema creation script 'schema.cql' if necessary");
+//        final ScriptExecutor scriptExecutor = new ScriptExecutor(session);
+//        scriptExecutor.executeScript("schema.cql");
+//    }
 
     public void shutDown() {
         LOGGER.info("SHUTDOWN called");

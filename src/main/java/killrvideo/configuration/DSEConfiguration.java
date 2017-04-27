@@ -37,22 +37,7 @@ public class DSEConfiguration {
 
     @Bean
     public Mapper<TagsByLetter> tagsByLetterMapper() { return manager.mapper(TagsByLetter.class); }
-//
-//    @Bean
-//    public UploadedVideoDestinations_Manager uploadedVideoDestinationsManager() {
-//        return managerFactory.forUploadedVideoDestinations();
-//    }
-//
-//    @Bean
-//    public UploadedVideoJobByJobId_Manager uploadedVideoJobByJobIdManager() {
-//        return managerFactory.forUploadedVideoJobByJobId();
-//    }
-//
-//    @Bean
-//    public UploadedVideoJobs_Manager uploadedVideoJobsManager() {
-//        return managerFactory.forUploadedVideoJobs();
-//    }
-//
+
     @Bean
     public Mapper<UserCredentials> userCredentialsMapper() {
         return manager.mapper(UserCredentials.class);
