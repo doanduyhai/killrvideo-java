@@ -3,6 +3,9 @@
 A reference application for Java developers looking to learn more about using [Apache Cassandra][cassandra] and
 [DataStax Enterprise][dse] in their applications and services. Learn more at [KillrVideo].
 
+NOTE: This Java implementation project is currently in a state of transition moving to the [DSE Java driver], so
+expect consistent updates.  This README will be updated once things are in a steady state.
+
 ## Running Locally
 
 Use these guides to get started running KillrVideo locally on your development machine:
