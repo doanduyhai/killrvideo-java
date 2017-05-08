@@ -16,10 +16,7 @@ import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
-import com.google.common.util.concurrent.ListenableFuture;
 import killrvideo.entity.Schema;
-import killrvideo.entity.UserVideos;
-import killrvideo.entity.Video;
 import killrvideo.utils.FutureUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,7 +24,6 @@ import org.springframework.stereotype.Service;
 
 import com.google.common.eventbus.EventBus;
 
-//import info.archinnov.achilles.generated.manager.VideoPlaybackStats_Manager;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import killrvideo.common.CommonTypes.Uuid;
@@ -83,7 +79,7 @@ public class StatisticsService extends AbstractStatisticsService {
          */
         BuiltStatement statement = QueryBuilder
                 .update(Schema.KEYSPACE, videoPlaybackStatsTableName)
-                .with(QueryBuilder.incr("views"))
+                .with(QueryBuilder.incr("views")) //use incr() call to increment my counter field https://docs.datastax.com/en/developer/java-driver/3.2/faq/#how-do-i-increment-counters-with-query-builder
                 .where(QueryBuilder.eq("videoid", videoId));
 
         FutureUtils.buildCompletableFuture(session.executeAsync(statement))
@@ -95,7 +91,6 @@ public class StatisticsService extends AbstractStatisticsService {
                         LOGGER.debug("End recording playback");
 
                     } else if (ex != null) {
-
                         LOGGER.error("Exception recording playback : " + mergeStackTrace(ex));
 
                         eventBus.post(new CassandraMutationError(request, ex));
@@ -115,7 +110,6 @@ public class StatisticsService extends AbstractStatisticsService {
             return;
         }
 
-        //:TODO Determine that buildCompletableFuture(uuid) below does what we think it does
         final List<CompletableFuture<VideoPlaybackStats>> statsFuture = request
                 .getVideoIdsList()
                 .stream()
@@ -131,13 +125,11 @@ public class StatisticsService extends AbstractStatisticsService {
          * We fire a list of async SELECT request and wait for all of them
          * to complete before returning a response to the client
          */
-        //:TODO Fix this
         CompletableFuture
                 .allOf(statsFuture.toArray(new CompletableFuture[statsFuture.size()]))
                 .thenApply(v -> statsFuture.stream().map(CompletableFuture::join).collect(toList()))
-                .handle((list,ex) ->{
+                .handle((list, ex) ->{
                     if (list != null) {
-
                         final Map<Uuid, PlayStats> result = list.stream()
                                 .filter(x -> x != null)
                                 .map(VideoPlaybackStats::toPlayStats)

@@ -9,19 +9,12 @@ import java.util.concurrent.ExecutorService;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.*;
 import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
-import com.datastax.driver.core.Session;
-import com.datastax.driver.core.Statement;
-import com.datastax.driver.core.BatchStatement;
-import com.datastax.driver.core.ResultSetFuture;
-import com.datastax.driver.core.PagingState;
-import com.datastax.driver.core.Row;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
-import com.datastax.driver.mapping.Result;
 
-import killrvideo.common.CommonTypes;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,6 +65,8 @@ public class CommentService extends AbstractCommentsService {
     Session session;
     private String commentsByUserTableName;
     private String commentsByVideoTableName;
+    private PreparedStatement commentsByUserPrepared;
+    private PreparedStatement commentsByVideoPrepared;
 
     @PostConstruct
     public void init(){
@@ -79,6 +74,19 @@ public class CommentService extends AbstractCommentsService {
 
         commentsByUserTableName = commentsByUserMapper.getTableMetadata().getName();
         commentsByVideoTableName = commentsByVideoMapper.getTableMetadata().getName();
+
+        // Prepared statements for commentOnVideo()
+        commentsByUserPrepared = session.prepare(
+                "INSERT INTO " + Schema.KEYSPACE + ".comments_by_user " +
+                        "(userid, commentid, comment, videoid) " +
+                        "VALUES (?, ?, ?, ?)"
+        );
+
+        commentsByVideoPrepared = session.prepare(
+                "INSERT INTO " + Schema.KEYSPACE + ".comments_by_video " +
+                        "(videoid, commentid, comment, userid) " +
+                        "VALUES (?, ?, ?, ?)"
+        );
     }
 
     @Override
@@ -96,11 +104,20 @@ public class CommentService extends AbstractCommentsService {
         final UUID commentId = UUID.fromString(request.getCommentId().getValue());
         final String comment = request.getComment();
 
-        final Statement s1 = commentsByUserMapper
-                .saveQuery(new CommentsByUser(userId, commentId, videoId, comment));
+        //:TODO Make these proper Async calls either with saveAsync or use prepared statements as in other areas
+//        final Statement s1 = commentsByUserMapper
+//                .saveQuery(new CommentsByUser(userId, commentId, videoId, comment));
+//
+//        final Statement s2 = commentsByVideoMapper
+//                .saveQuery(new CommentsByVideo(videoId, commentId, userId, comment));
 
-        final Statement s2 = commentsByVideoMapper
-                .saveQuery(new CommentsByVideo(videoId, commentId, userId, comment));
+        BoundStatement bs1 = commentsByUserPrepared.bind(
+                userId, commentId, comment, videoId
+        );
+
+        BoundStatement bs2 = commentsByVideoPrepared.bind(
+                videoId, commentId, comment, userId
+        );
 
         /**
          * We need to insert into comments_by_user and comments_by_video
@@ -108,8 +125,8 @@ public class CommentService extends AbstractCommentsService {
          * in case of error
          */
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
-        batchStatement.add(s1);
-        batchStatement.add(s2);
+        batchStatement.add(bs1);
+        batchStatement.add(bs2);
         batchStatement.setDefaultTimestamp(now.getTime());
 
         FutureUtils.buildCompletableFuture(manager.getSession().executeAsync(batchStatement))
@@ -152,7 +169,7 @@ public class CommentService extends AbstractCommentsService {
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
 
-        ResultSetFuture future;
+        BuiltStatement statement;
 
         /**
          * Query without startingCommentId to get a reference point
@@ -161,7 +178,7 @@ public class CommentService extends AbstractCommentsService {
          */
         if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
             LOGGER.debug("Query without startingCommentId");
-            BuiltStatement statement = QueryBuilder
+            statement = QueryBuilder
                     .select()
                     .column("userid")
                     .column("commentid")
@@ -174,12 +191,6 @@ public class CommentService extends AbstractCommentsService {
             statement
                     .setFetchSize(request.getPageSize());
 
-            //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
-            if (pagingStateString.isPresent()) {
-                statement.setPagingState(PagingState.fromString(pagingStateString.get()));
-            }
-
-            future = session.executeAsync(statement);
         }
 
         /**
@@ -188,7 +199,7 @@ public class CommentService extends AbstractCommentsService {
          */
         else {
             LOGGER.debug("Query WITH startingCommentId");
-            BuiltStatement statement = QueryBuilder
+            statement = QueryBuilder
                     .select()
                     .column("userid")
                     .column("commentid")
@@ -202,16 +213,19 @@ public class CommentService extends AbstractCommentsService {
             statement
                     .setFetchSize(request.getPageSize());
 
-            future = session.executeAsync(statement);
         }
 
-        FutureUtils.buildCompletableFuture(future)
+        //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
+        if (pagingStateString.isPresent()) {
+            statement.setPagingState(PagingState.fromString(pagingStateString.get()));
+        }
+
+        FutureUtils.buildCompletableFuture(session.executeAsync(statement))
                 .handle((commentResult, ex) -> {
                     try {
                         if (commentResult != null) {
                             final GetUserCommentsResponse.Builder builder = GetUserCommentsResponse.newBuilder();
 
-                            //:TODO See if there is a proper way to handle @Computed 1) within the entity itself and 2) for the mapper
                             int remaining = commentResult.getAvailableWithoutFetching();
                             for (Row row : commentResult) {
                                 CommentsByUser commentByUser = new CommentsByUser(
@@ -219,11 +233,6 @@ public class CommentService extends AbstractCommentsService {
                                         row.getUUID("videoid"), row.getString("comment")
                                 );
 
-                                /**
-                                 * Explicitly set dateOfComment because it is not in the constructor.
-                                 * This gives us the "proper" return object for the response to the front-end
-                                 * UI.  It does not function if this value is null or not the correct type.
-                                 */
                                 commentByUser.setDateOfComment(row.getTimestamp("comment_timestamp"));
                                 builder.addComments(commentByUser.toUserComment());
 
@@ -271,7 +280,8 @@ public class CommentService extends AbstractCommentsService {
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
 
-        final ResultSetFuture future;
+        //:TODO must prepare the following statements correctly to be proper async
+        BuiltStatement statement;
 
         /**
          * Query without startingCommentId to get a reference point
@@ -279,8 +289,19 @@ public class CommentService extends AbstractCommentsService {
          * the first video comment as reference point
          */
         if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
+
+            /**
+             * Notice below I execute fcall() to pull the timstamp out of the
+             * commentid timeuuid field, yet I am using the @Computed annotation
+             * to do the same thing within the CommentsByVideo entity for the dateOfComment
+             * field.  I do this because I am using QueryBuilder for the query below.
+             * @Computed is only supported when using the mapper stated per
+             * http://docs.datastax.com/en/drivers/java/3.2/com/datastax/driver/mapping/annotations/Computed.html.
+             * So, I essentially have 2 ways to get the timestamp out of my timeUUID column
+             * depending on the type of query I am performing.
+             */
             LOGGER.debug("Query without startingCommentId");
-            BuiltStatement statement = QueryBuilder
+            statement = QueryBuilder
                     .select()
                     .column("videoid")
                     .column("commentid")
@@ -293,29 +314,14 @@ public class CommentService extends AbstractCommentsService {
             statement
                     .setFetchSize(request.getPageSize());
 
-            //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
-            if (pagingStateString.isPresent()) {
-                statement.setPagingState(PagingState.fromString(pagingStateString.get()));
-            }
-
-            future = session.executeAsync(statement);
-
         }
         /**
          * Subsequent requests always provide startingCommentId to load page
          * of video comments. Fetch size/page size is expected to be > 1
          */
         else {
-            /**
-             * Notice below I have a fcall to pull the timstamp out of the
-             * commentid timeuuid field.  This should be handled by the @Computed
-             * annotation in the CommentsByVideo entity, but it seems these only work with
-             * simple "get" statements per
-             * http://docs.datastax.com/en/drivers/java/3.1/com/datastax/driver/mapping/annotations/Computed.html
-             */
-            //:TODO See if maybe I am simply pulling "dateOfComment" incorrectly when using @Computed
             LOGGER.debug("Query WITH startingCommentId");
-            BuiltStatement statement = QueryBuilder
+            statement = QueryBuilder
                     .select()
                     .column("videoid")
                     .column("commentid")
@@ -328,70 +334,59 @@ public class CommentService extends AbstractCommentsService {
 
             statement
                     .setFetchSize(request.getPageSize());
-
-            future = session.executeAsync(statement);
         }
 
-        FutureUtils.buildCompletableFuture(future)
-        .handle((commentResult, ex) -> {
-            try {
-                if (commentResult != null) {
-                    final GetVideoCommentsResponse.Builder builder = GetVideoCommentsResponse.newBuilder();
+        //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
+        if (pagingStateString.isPresent()) {
+            statement.setPagingState(PagingState.fromString(pagingStateString.get()));
+        }
 
-                    /**
-                     * This.....is not how I planned to do this, but it seems the mapper
-                     * does not work when dealing with @Computed types as we are within the
-                     * CommentsByVideo entity for dateOfComment nor does the constructor
-                     * include dateOfComment.  I might simply change the constructor to include
-                     * dateOfComment, but this flies against using @Computed in the first place.
-                     * For now, this works.
-                     */
-                    //:TODO See if there is a proper way to handle @Computed 1) within the entity itself and 2) for the mapper
-                    int remaining = commentResult.getAvailableWithoutFetching();
-                    for (Row row : commentResult) {
-                        CommentsByVideo commentByVideo = new CommentsByVideo(
-                                row.getUUID("videoid"), row.getUUID("commentid"),
-                                row.getUUID("userid"), row.getString("comment")
-                        );
+        FutureUtils.buildCompletableFuture(session.executeAsync(statement))
+                .handle((commentResult, ex) -> {
+                    try {
+                        if (commentResult != null) {
+                            final GetVideoCommentsResponse.Builder builder = GetVideoCommentsResponse.newBuilder();
 
-                        /**
-                         * Explicitly set dateOfComment because it is not in the constructor.
-                         * This gives us the "proper" return object for the response to the front-end
-                         * UI.  It does not function if this value is null or not the correct type.
-                         *
-                         * Make sure to comment on THIS!!!
-                         * https://docs.datastax.com/en/developer/java-driver/3.1/manual/paging/
-                         */
-                        //:TODO ensure to comment on the paging link as stated above
-                        commentByVideo.setDateOfComment(row.getTimestamp("comment_timestamp"));
-                        builder.addComments(commentByVideo.toVideoComment());
+                            int remaining = commentResult.getAvailableWithoutFetching();
+                            for (Row row : commentResult) {
+                                CommentsByVideo commentByVideo = new CommentsByVideo(
+                                        row.getUUID("videoid"), row.getUUID("commentid"),
+                                        row.getUUID("userid"), row.getString("comment")
+                                );
 
-                        if (--remaining == 0) {
-                            break;
+                                /**
+                                 * Explicitly set dateOfComment because I cannot use the @Computed
+                                 * annotation set on the dateOfComment field when using QueryBuilder.
+                                 * This gives us the "proper" return object expected for the response to the front-end
+                                 * UI.  It does not function if this value is null or not the correct type.
+                                 */
+                                commentByVideo.setDateOfComment(row.getTimestamp("comment_timestamp"));
+                                builder.addComments(commentByVideo.toVideoComment());
+
+                                if (--remaining == 0) {
+                                    break;
+                                }
+                            }
+
+                            Optional.ofNullable(commentResult.getExecutionInfo().getPagingState())
+                                    .map(PagingState::toString)
+                                    .ifPresent(builder::setPagingState);
+                            responseObserver.onNext(builder.build());
+                            responseObserver.onCompleted();
+
+                            LOGGER.debug("End get video comments request");
+
+                        } else if (ex != null) {
+                            LOGGER.error("Exception getting video comments : " + mergeStackTrace(ex));
+
+                            responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
                         }
+
+                    } catch (Exception exception) {
+                        LOGGER.error("CATCH Exception getting video comments : " + mergeStackTrace(exception));
+
                     }
-
-                    Optional.ofNullable(commentResult.getExecutionInfo().getPagingState())
-                            .map(PagingState::toString)
-                            .ifPresent(builder::setPagingState);
-                    responseObserver.onNext(builder.build());
-                    responseObserver.onCompleted();
-
-                    LOGGER.debug("End get video comments request");
-
-                } else if (ex != null) {
-                    LOGGER.error("Exception getting video comments : " + mergeStackTrace(ex));
-
-                    responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
-                }
-
-            } catch (Exception exception) {
-                LOGGER.error("CATCH Exception getting video comments : " + mergeStackTrace(exception));
-
-            }
-
-            return commentResult;
-
-        });
+                    return commentResult;
+                });
     }
 }

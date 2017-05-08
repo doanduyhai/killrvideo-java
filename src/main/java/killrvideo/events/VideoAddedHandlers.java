@@ -69,6 +69,13 @@ public class VideoAddedHandlers {
         );
     }
 
+    /**
+     * Make @Subscribe subscriber magic happen anytime a youTube video is added from
+     * VideoCatalogService.submitYouTubeVideo() with a call to eventBus.post().
+     * This method inserts any provided tags into multiple tag based tables for use with
+     * searching later using batch functionality.
+     * @param youTubeVideoAdded
+     */
     @Subscribe
     public void handle(YouTubeVideoAdded youTubeVideoAdded) {
 
@@ -84,6 +91,8 @@ public class VideoAddedHandlers {
 
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
 
+        LOGGER.debug("Handler thread " + Thread.currentThread().toString());
+
         tags.forEach(tag -> {
             BoundStatement videosByTagBound = videosByTagPrepared.bind(
                     tag, videoId, addedDate, userId, name, previewImageLocation, taggedDate
@@ -93,6 +102,18 @@ public class VideoAddedHandlers {
                     tag.substring(0,1), tag
             );
 
+
+            //:TODO Make this completely async by using saveQueryAsync and build each statement in the batch with a future and handle
+//            batchStatement.add(
+//                    videosByTagMapper.saveQuery(
+//                            new VideoByTag(tag, videoId, userId, name, previewImageLocation, addedDate, taggedDate)
+//                    ));
+//
+//            batchStatement.add(
+//                    tagsByLetterMapper.saveQuery(
+//                            new TagsByLetter(tag.substring(0,1), tag)
+//                    ));
+//
             batchStatement.add(videosByTagBound);
             batchStatement.add(tagsByLetterBound);
         });
@@ -105,6 +126,7 @@ public class VideoAddedHandlers {
                     LOGGER.debug("End handling YouTubeVideoAdded");
                 }
                 if (ex != null) {
+                    //:TODO We should probably put in some logic that will repeat the transaction if it fails for some reason
 
                 }
                 return rs;

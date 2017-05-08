@@ -5,12 +5,14 @@ import static java.util.stream.Collectors.toList;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 import static com.datastax.driver.mapping.Mapper.Option.*;
 
+import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.Date;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.concurrent.CompletableFuture;
@@ -24,6 +26,9 @@ import javax.annotation.Nullable;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.core.ResultSet;
+import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.mapping.Result;
@@ -197,6 +202,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                                 .setUserId(request.getUserId())
                                 .setVideoId(request.getVideoId());
                         youTubeVideoAdded.addAllTags(Sets.newHashSet(request.getTagsList()));
+
+                        //:TODO figure out if this is linked to handle() in VideoAddedHandlders
                         eventBus.post(youTubeVideoAdded.build());
 
                         responseObserver.onNext(SubmitYouTubeVideoResponse.newBuilder().build());
@@ -229,11 +236,15 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
 
         // videoId matches the partition key set in the Video class
-        Statement videoQuery = videoMapper.getQuery(videoId);
-        ResultSetFuture resultsFuture = session.executeAsync(videoQuery);
-        FutureUtils.buildCompletableFuture(resultsFuture)
-                .handle((videoResult, ex) -> {
-                    Video video = videoMapper.map(videoResult).one();
+        //:TODO getQuery does more than simply generate the query and causes a transaction.  This is not true async and I must replace with async call.
+        //Statement videoQuery = videoMapper.getQuery(videoId);
+
+        //:TODO notice that Olivier had me put the videoMapper.getAsync call directly into the callback...don't forget that
+        //:TODO a call to getQuery still produces a prepared statement and that needs to be handled aync otherwise it will block
+        //ResultSetFuture resultsFuture = session.executeAsync(videoQuery);
+        FutureUtils.buildCompletableFuture(videoMapper.getAsync(videoId))
+                .handle((video, ex) -> {
+                    //Video video = videoMapper.map(videoResult).one();
 
                     if (video != null) {
                         LOGGER.debug("Video is: " + (video.getName()));
@@ -251,7 +262,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
 
                     }
-                    return videoResult;
+                    return video;
                 });
     }
 
@@ -452,7 +463,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         final Optional<Date> startingAddedDate = Optional
                 .ofNullable(request.getStartingAddedDate())
-                .filter(x -> StringUtils.isNotBlank(x.toString()))
+                //.filter(x -> StringUtils.isNotBlank(x.toString()))
                 .map(x -> Instant.ofEpochSecond(x.getSeconds(), x.getNanos()))
                 .map(Date::from);
 
@@ -484,6 +495,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
                 ResultSetFuture future;
                 ResultSet futureResults;
+                BoundStatement bound;
 
                 /**
                  * If startingAddedDate and startingVideoId are provided,
@@ -494,16 +506,17 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                      * The startingPointPrepared statement can be found at the top
                      * of the class within PostConstruct
                      */
-                    BoundStatement bound = latestVideoPreview_startingPointPrepared.bind()
+                    bound = latestVideoPreview_startingPointPrepared.bind()
                             .setString("ymd", yyyyMMdd)
+                            //.setString("ymd", "20170427")
                             .setTimestamp("ad", startingAddedDate.get())
                             .setUUID("vid", startingVideoId.get());
 
                     bound
                             .setFetchSize(recordsStillNeeded);
 
-                    future = session.executeAsync(bound);
-                    futureResults = future.getUninterruptibly();
+//                    future = session.executeAsync(bound);
+//                    futureResults = future.getUninterruptibly();
 
                     LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
 
@@ -512,29 +525,40 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                      * The noStartingPointPrepared statement can be found at the top
                      * of the class within PostConstruct
                      */
-                    BoundStatement bound = latestVideoPreview_noStartingPointPrepared.bind()
+                    bound = latestVideoPreview_noStartingPointPrepared.bind()
                             .setString("ymd", yyyyMMdd);
 
                     bound
                             .setFetchSize(recordsStillNeeded);
 
-                    //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
-                    if (pagingStateString.isPresent()) {
-                        bound.setPagingState(PagingState.fromString(pagingStateString.get()));
-                    }
-
-                    /**
-                     * Not entirely sure why DuyHai used getUninterruptibly within his
-                     * getListWithStats() call from Achilles, but I copied it to ensure
-                     * I replicated the same functionality.  Must get clarification on this.
-                     */
-                    future = session.executeAsync(bound);
-                    futureResults = future.getUninterruptibly();
-
-                    cassandraPagingStateUsed.compareAndSet(false, true);
+//                    /**
+//                     * Not entirely sure why DuyHai used getUninterruptibly within his
+//                     * getListWithStats() call from Achilles, but I copied it to ensure
+//                     * I replicated the same functionality.  Must get clarification on this.
+//                     */
+//                    future = session.executeAsync(bound);
+//                    futureResults = future.getUninterruptibly();
+//
+//                    cassandraPagingStateUsed.compareAndSet(false, true);
 
                     LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
                 }
+
+                //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
+                if (pagingStateString.isPresent()) {
+                    bound.setPagingState(PagingState.fromString(pagingStateString.get()));
+                    cassandraPagingStateUsed.compareAndSet(false, true);
+                }
+
+                /**
+                 * Not entirely sure why DuyHai used getUninterruptibly within his
+                 * getListWithStats() call from Achilles, but I copied it to ensure
+                 * I replicated the same functionality.  Must get clarification on this.
+                 */
+                future = session.executeAsync(bound);
+                //:TODO Find a way to do this properly in an async fashion, in talking to Olivier
+                //:TODO there is a way to do it, but it is more complicated.  ControlConnection
+                futureResults = future.getUninterruptibly();
 
                 //Result<LatestVideos> videos = latestVideosMapper.map(Uninterruptibles.getUninterruptibly(future));
                 Result<LatestVideos> videos = latestVideosMapper.map(futureResults);
@@ -544,7 +568,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         .collect(toList()));
 
                 final ExecutionInfo executionInfo = videos.getExecutionInfo();
-                //final ExecutionInfo executionInfo = futureResults.getExecutionInfo();
 
                 // See if we can stop querying
                 if (results.size() >= request.getPageSize()) {
@@ -611,27 +634,18 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         //final CompletableFuture<Tuple2<List<UserVideos>, ExecutionInfo>> listAsync;
         final Optional<String> pagingStateString = Optional.ofNullable(request.getPagingState()).filter(StringUtils::isNotBlank);
         ResultSetFuture future;
+        BoundStatement bound;
 
         /**
          * If startingAddedDate and startingVideoId are provided,
          * we do NOT use the paging state
          */
         if (startingVideoId.isPresent() && startingAddedDate.isPresent()) {
-//            listAsync = userVideosManager
-//                    .dsl()
-//                    .select()
-//                    .allColumns_FromBaseTable()
-//                    .where()
-//                    .userid().Eq(userId)
-//                    .addedDate_And_videoid().Lte(startingAddedDate.get(), startingVideoId.get())
-//                    .withFetchSize(request.getPageSize())
-//                    .getListAsyncWithStats();
-
             /**
              * The startingPointPrepared statement can be found at the top
              * of the class within PostConstruct
              */
-            BoundStatement bound = userVideoPreview_startingPointPrepared.bind()
+            bound = userVideoPreview_startingPointPrepared.bind()
                     .setUUID("uid", userId)
                     .setTimestamp("ad", startingAddedDate.get())
                     .setUUID("vid", startingVideoId.get());
@@ -639,41 +653,27 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
             bound
                     .setFetchSize(request.getPageSize());
 
-            future = session.executeAsync(bound);
-
             LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
 
         } else {
-//            listAsync = userVideosManager
-//                    .dsl()
-//                    .select()
-//                    .allColumns_FromBaseTable()
-//                    .where()
-//                    .userid().Eq(userId)
-//                    .withFetchSize(request.getPageSize())
-//                    .withOptionalPagingStateString(pagingStateString)
-//                    .getListAsyncWithStats();
-
             /**
              * The noStartingPointPrepared statement can be found at the top
              * of the class within PostConstruct
              */
-            BoundStatement bound = userVideoPreview_noStartingPointPrepared.bind()
+            bound = userVideoPreview_noStartingPointPrepared.bind()
                     .setUUID("uid", userId);
 
             bound
                     .setFetchSize(request.getPageSize());
 
-            //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
-            if (pagingStateString.isPresent()) {
-                bound.setPagingState(PagingState.fromString(pagingStateString.get()));
-            }
-
-            future = session.executeAsync(bound);
-
             LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
         }
 
+        //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
+        if (pagingStateString.isPresent()) {
+            bound.setPagingState(PagingState.fromString(pagingStateString.get()));
+        }
+        future = session.executeAsync(bound);
 
         FutureUtils.buildCompletableFuture(userVideosMapper.mapAsync(future))
                 .handle((userVideos, ex) -> {
@@ -763,6 +763,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
      * tuple with 3 elements (List<String>, Integer, String) as Supplier.
      * @return TupleValue
      */
+    //:TODO a tuple may not be the best way to do this as we are not using it as intended.  Take a look at Patrick's modified
+    //:TODO killrvideo schema for tuple/UDT examples
     private Supplier<TupleValue> buildFirstCustomPagingState() {
         return () -> {
             final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");

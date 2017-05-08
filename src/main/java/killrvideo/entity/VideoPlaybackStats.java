@@ -24,9 +24,12 @@ public class VideoPlaybackStats {
     @PartitionKey
     private UUID videoid;
 
+    /**
+     * "views" column is a counter type in the underlying DSE database.  As of driver version 3.2 there
+     * is no "@Counter" annotation that I know of.  No worries though, just use the incr() function
+     * while using the QueryBuilder.  Something similar to with(QueryBuilder.incr("views")).
+     */
     @Column
-    //:TODO Figure out Counter equivalent in DSE driver
-    //@Counter
     private Long views;
 
     public UUID getVideoid() {

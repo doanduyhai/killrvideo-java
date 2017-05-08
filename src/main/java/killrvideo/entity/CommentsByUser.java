@@ -2,19 +2,13 @@ package killrvideo.entity;
 
 import static java.util.UUID.fromString;
 import static killrvideo.entity.Schema.KEYSPACE;
-import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
-import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
 import javax.validation.constraints.NotNull;
-
-import killrvideo.common.CommonTypes;
-import org.apache.commons.lang3.StringUtils;
 import org.hibernate.validator.constraints.NotBlank;
 
-//import info.archinnov.achilles.annotations.*;
 import com.datastax.driver.mapping.annotations.*;
 import killrvideo.comments.CommentsServiceOuterClass;
 import killrvideo.comments.CommentsServiceOuterClass.CommentOnVideoRequest;
@@ -27,8 +21,6 @@ public class CommentsByUser {
     private UUID userid;
 
     @ClusteringColumn
-    //:TODO Is there TimeUUID support in DSE driver?
-    //@TimeUUID
     private UUID commentid;
 
     @NotNull
@@ -39,9 +31,7 @@ public class CommentsByUser {
     @Column
     private String comment;
 
-//    @Column
     @NotNull
-    //:TODO figure out to to convert Computed annotation
     @Computed("toTimestamp(commentid)")
     private Date dateOfComment;
 

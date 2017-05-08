@@ -12,8 +12,8 @@
         <start-class>killrvideo.KillrVideoServer</start-class>
         <grpc.version>1.0.0</grpc.version>
         <achilles.version>5.1.5</achilles.version>
-        <dse.version>1.1.1</dse.version>
-        <cassandra.version>3.2.0</cassandra.version>
+        <dse.version>1.2.3</dse.version>
+        <!-- <cassandra.version>3.2.0</cassandra.version> -->
         <guava.version>18.0</guava.version>
         <commons.lang3.version>3.3.2</commons.lang3.version>
         <commons-codec.version>1.10</commons-codec.version>
@@ -25,7 +25,7 @@
         <validation.api.version>1.1.0.Final</validation.api.version>
         <javax.el.api.version>2.2.4</javax.el.api.version>
         <validator.version>5.2.2.Final</validator.version>
-        <netty.version>4.1.3.Final</netty.version>
+        <!-- <netty.version>4.1.3.Final</netty.version> -->
         <etcd4j.version>1.2</etcd4j.version>
 
         <mockito.version>1.9.5</mockito.version>
@@ -40,9 +40,17 @@
             <artifactId>achilles-core</artifactId>
             <version>${achilles.version}</version>
             <exclusions>
-                <exclusion>
+                <!-- <exclusion>
                     <groupId>io.netty</groupId>
                     <artifactId>netty-handler</artifactId>
+                </exclusion> -->
+                <exclusion>
+                    <groupId>com.datastax.cassandra</groupId>
+                    <artifactId>cassandra-driver-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.datastax.cassandra</groupId>
+                    <artifactId>cassandra-driver-extras</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -63,8 +71,8 @@
         with the Netty Handler.  Not sure why this works, didn't
         really look into it, but it does.  -->
         <dependency>
-            <groupId>com.datastax.cassandra</groupId>
-            <artifactId>dse-driver</artifactId>
+            <groupId>com.datastax.dse</groupId>
+            <artifactId>dse-java-driver-core</artifactId>
             <version>${dse.version}</version>
             <exclusions>
                 <exclusion>
@@ -73,12 +81,22 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <dependency>
+            <groupId>com.datastax.dse</groupId>
+            <artifactId>dse-java-driver-mapping</artifactId>
+            <version>${dse.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.datastax.dse</groupId>
+            <artifactId>dse-java-driver-extras</artifactId>
+            <version>${dse.version}</version>
+        </dependency>
 
         <!-- Include the object mapper from the provided Cassandra
         driver seen here -> http://docs.datastax.com/en/developer/java-driver/3.1/manual/object_mapper
         This should help replace some of the lost boiler plate
         capabilities we had from Achilles -->
-        <dependency>
+        <!-- <dependency>
             <groupId>com.datastax.cassandra</groupId>
             <artifactId>cassandra-driver-core</artifactId>
             <version>${cassandra.version}</version>
@@ -98,7 +116,7 @@
             <groupId>com.datastax.cassandra</groupId>
             <artifactId>cassandra-driver-extras</artifactId>
             <version>${cassandra.version}</version>
-        </dependency>
+        </dependency> -->
 
 
         <!-- Added explicit call to guava version 18 because of a conflict
