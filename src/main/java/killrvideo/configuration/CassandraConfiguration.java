@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
-import com.datastax.driver.core.Cluster;
+import com.datastax.driver.dse.DseCluster;
 import com.datastax.driver.core.Session;
 import com.xqbase.etcd4j.EtcdClient;
 
@@ -59,7 +59,7 @@ public class CassandraConfiguration {
 
             LOGGER.info(String.format("Retrieving cassandra hosts %s and port %s from etcd", cassandraHosts, cassandraPort));
 
-            Cluster cluster = Cluster.builder()
+            DseCluster cluster = DseCluster.builder()
                     .addContactPoints(cassandraHosts)
                     .withPort(cassandraPort)
                     .withClusterName(CLUSTER_NAME)
