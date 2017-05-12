@@ -8,18 +8,22 @@ import javax.validation.constraints.NotNull;
 
 import org.hibernate.validator.constraints.NotBlank;
 
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+//import info.archinnov.achilles.annotations.Column;
+//import info.archinnov.achilles.annotations.PartitionKey;
+//import info.archinnov.achilles.annotations.Table;
 
-@Table(keyspace = KEYSPACE, table = "user_credentials")
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+
+@Table(keyspace = KEYSPACE, name = "user_credentials")
 public class UserCredentials {
 
     @PartitionKey
     private String email;
 
     @NotBlank
-    @Column("pass")
+    @Column(name = "password")
     private String password;
 
     @NotNull

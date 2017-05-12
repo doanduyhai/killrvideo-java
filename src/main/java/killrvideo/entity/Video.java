@@ -10,16 +10,22 @@ import javax.validation.constraints.NotNull;
 
 import org.hibernate.validator.constraints.NotBlank;
 
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.EmptyCollectionIfNull;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+//import info.archinnov.achilles.annotations.Column;
+//import info.archinnov.achilles.annotations.EmptyCollectionIfNull;
+//import info.archinnov.achilles.annotations.PartitionKey;
+//import info.archinnov.achilles.annotations.Table;
+
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+import killrvideo.utils.EmptyCollectionIfNull;
+
 import killrvideo.utils.TypeConverter;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetVideoResponse;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoLocationType;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 
-@Table(keyspace = KEYSPACE, table = "videos")
+@Table(keyspace = KEYSPACE, name = "videos")
 public class Video extends AbstractVideo{
 
     @PartitionKey
@@ -37,7 +43,7 @@ public class Video extends AbstractVideo{
     @Column
     private String location;
 
-    @Column("location_type")
+    @Column(name = "location_type")
     private int locationType;
 
     @Column
@@ -45,7 +51,7 @@ public class Video extends AbstractVideo{
     private Set<String> tags;
 
     @NotNull
-    @Column("added_date")
+    @Column(name = "added_date")
     private Date addedDate;
 
     public Video() {

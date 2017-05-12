@@ -5,19 +5,25 @@ import static killrvideo.entity.Schema.KEYSPACE;
 import java.util.Date;
 import java.util.UUID;
 
-import info.archinnov.achilles.annotations.ClusteringColumn;
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+//import info.archinnov.achilles.annotations.ClusteringColumn;
+//import info.archinnov.achilles.annotations.Column;
+//import info.archinnov.achilles.annotations.PartitionKey;
+//import info.archinnov.achilles.annotations.Table;
 
-@Table(keyspace = KEYSPACE, table = "encoding_job_notifications")
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.ClusteringColumn;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+
+
+@Table(keyspace = KEYSPACE, name = "encoding_job_notifications")
 public class EncodingJobNotification {
 
     @PartitionKey
     private UUID videoid;
 
-    @ClusteringColumn(value = 1, asc = false)
-    @Column("status_date")
+    @ClusteringColumn(1)
+    @Column(name = "status_date")
     private Date statusDate;
 
     @ClusteringColumn(2)

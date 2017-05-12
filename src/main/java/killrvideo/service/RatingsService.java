@@ -6,20 +6,27 @@ import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.ResultSetFuture;
+import com.datastax.driver.core.Session;
+import com.datastax.driver.core.Statement;
+import com.datastax.driver.core.querybuilder.BuiltStatement;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
+import killrvideo.entity.*;
+import killrvideo.utils.FutureUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.google.common.eventbus.EventBus;
 
-import info.archinnov.achilles.generated.manager.VideoRatingByUser_Manager;
-import info.archinnov.achilles.generated.manager.VideoRating_Manager;
-import info.archinnov.achilles.type.Empty;
+import com.datastax.driver.mapping.MappingManager;
+import com.datastax.driver.mapping.Mapper;
+
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-import killrvideo.entity.VideoRatingByUser;
 import killrvideo.events.CassandraMutationError;
 import killrvideo.ratings.RatingsServiceGrpc.AbstractRatingsService;
 import killrvideo.ratings.RatingsServiceOuterClass.*;
@@ -33,10 +40,13 @@ public class RatingsService extends AbstractRatingsService {
     private static final Logger LOGGER = LoggerFactory.getLogger(RatingsService.class);
 
     @Inject
-    VideoRating_Manager ratingManager;
+    MappingManager manager;
 
     @Inject
-    VideoRatingByUser_Manager ratingByUserManager;
+    Mapper<VideoRating> videoRatingMapper;
+
+    @Inject
+    Mapper<VideoRatingByUser> videoRatingByUserMapper;
 
     @Inject
     EventBus eventBus;
@@ -44,10 +54,20 @@ public class RatingsService extends AbstractRatingsService {
     @Inject
     KillrVideoInputValidator validator;
 
+    private Session session;
+    private String videoRatingsTableName;
+
+    @PostConstruct
+    public void init(){
+        this.session = manager.getSession();
+
+        videoRatingsTableName = videoRatingMapper.getTableMetadata().getName();
+    }
+
     @Override
     public void rateVideo(RateVideoRequest request, StreamObserver<RateVideoResponse> responseObserver) {
 
-        LOGGER.debug("Start rate video request");
+        LOGGER.debug("-----Start rate video request-----");
 
         if (!validator.isValid(request, responseObserver)) {
             return;
@@ -57,28 +77,26 @@ public class RatingsService extends AbstractRatingsService {
 
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
         final UUID userId = UUID.fromString(request.getUserId().getValue());
+        final Integer rating = request.getRating();
 
         /**
          * Increment rating_counter by 1
          * Increment rating_total by amount of rating
          */
-        final CompletableFuture<Empty> counterUpdateAsync = ratingManager
-                .dsl()
-                .update()
-                .fromBaseTable()
-                .ratingCounter().Incr()
-                .ratingTotal().Incr(new Long(request.getRating()))
-                .where()
-                .videoid().Eq(videoId)
-                .executeAsync();
+        //:TODO make this a proper prepared statement
+        BuiltStatement counterUpdateStatement = QueryBuilder
+                .update(Schema.KEYSPACE, videoRatingsTableName)
+                .with(QueryBuilder.incr("rating_counter"))
+                .and(QueryBuilder.incr("rating_total", rating))
+                .where(QueryBuilder.eq("videoid", videoId));
 
         /**
          * Insert the rating into video_ratings_by_user
          */
-        final CompletableFuture<Empty> ratingInsertAsync = ratingByUserManager
-                .crud()
-                .insert(new VideoRatingByUser(videoId, userId, request.getRating()))
-                .executeAsync();
+        //:TODO make this a proper prepared statement
+        Statement ratingInsertQuery = videoRatingByUserMapper
+                .saveQuery(new VideoRatingByUser(videoId, userId, rating));
+
 
         /**
          * Here, instead of using logged batch, we can insert both mutations asynchronously
@@ -86,7 +104,10 @@ public class RatingsService extends AbstractRatingsService {
          * by another micro-service
          */
         CompletableFuture
-                .allOf(counterUpdateAsync, ratingInsertAsync)
+                .allOf(
+                        FutureUtils.buildCompletableFuture(session.executeAsync(counterUpdateStatement)),
+                        FutureUtils.buildCompletableFuture(session.executeAsync(ratingInsertQuery))
+                )
                 .handle((rs, ex) -> {
                     if (ex == null) {
                         eventBus.post(UserRatedVideo.newBuilder()
@@ -101,7 +122,6 @@ public class RatingsService extends AbstractRatingsService {
                         LOGGER.debug("End rate video request");
 
                     } else {
-
                         LOGGER.error("Exception rating video : " + mergeStackTrace(ex));
 
                         eventBus.post(new CassandraMutationError(request, ex));
@@ -114,26 +134,30 @@ public class RatingsService extends AbstractRatingsService {
     @Override
     public void getRating(GetRatingRequest request, StreamObserver<GetRatingResponse> responseObserver) {
 
-        LOGGER.debug("Start get video rating request");
+        LOGGER.debug("-----Start get video rating request-----");
+        LOGGER.debug("Rating request is: " + request.toString());
+
         if (!validator.isValid(request, responseObserver)) {
             return;
         }
 
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
 
-        ratingManager
-                .crud()
-                .findById(videoId)
-                .getAsync()
-                .handle((entity, ex) -> {
+        // videoId matches the partition key set in the VideoRating class
+        Statement videoRatingQuery = videoRatingMapper.getQuery(videoId);
+        ResultSetFuture resultsFuture = manager.getSession().executeAsync(videoRatingQuery);
+
+        FutureUtils.buildCompletableFuture(resultsFuture)
+                .handle((ratingResult, ex) -> {
+                    VideoRating ratings = videoRatingMapper.map(ratingResult).one();
+
                     if (ex != null) {
-
                         LOGGER.error("Exception when getting video rating : " + mergeStackTrace(ex));
-
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
                     } else {
-                        if (entity != null) {
-                            responseObserver.onNext(entity.toRatingResponse());
+                        if (ratings != null) {
+                            responseObserver.onNext((ratings.toRatingResponse()));
                         }
                         /**
                          * If no row is returned (entity == null), we should
@@ -149,7 +173,7 @@ public class RatingsService extends AbstractRatingsService {
                         responseObserver.onCompleted();
                         LOGGER.debug("End get video rating request");
                     }
-                    return entity;
+                    return ratingResult;
                 });
 
     }
@@ -157,7 +181,7 @@ public class RatingsService extends AbstractRatingsService {
     @Override
     public void getUserRating(GetUserRatingRequest request, StreamObserver<GetUserRatingResponse> responseObserver) {
 
-        LOGGER.debug("Start get user rating request");
+        LOGGER.debug("-----Start get user rating request-----");
 
         if (!validator.isValid(request, responseObserver)) {
             return;
@@ -166,19 +190,20 @@ public class RatingsService extends AbstractRatingsService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
         final UUID userId = UUID.fromString(request.getUserId().getValue());
 
-        ratingByUserManager
-                .crud()
-                .findById(videoId, userId)
-                .getAsync()
-                .handle((entity, ex) -> {
-                    if (ex != null) {
+        Statement query = videoRatingByUserMapper.getQuery(videoId, userId);
 
+        FutureUtils.buildCompletableFuture(session.executeAsync(query))
+                .handle((entity, ex) -> {
+                    VideoRatingByUser videoRating = videoRatingByUserMapper.map(entity).one();
+
+                    if (ex != null) {
                         LOGGER.error("Exception when getting user rating : " + mergeStackTrace(ex));
 
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
                     } else {
-                        if (entity != null) {
-                            responseObserver.onNext(entity.toUserRatingResponse());
+                        if (videoRating != null) {
+                            responseObserver.onNext(videoRating.toUserRatingResponse());
                         }
                         /**
                          * If no row is returned (entity == null), we should
@@ -198,6 +223,5 @@ public class RatingsService extends AbstractRatingsService {
                     return entity;
                 });
     }
-
 
 }

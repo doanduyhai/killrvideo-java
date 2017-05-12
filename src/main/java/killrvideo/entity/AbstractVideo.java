@@ -4,7 +4,8 @@ import java.util.UUID;
 
 import org.hibernate.validator.constraints.NotBlank;
 
-import info.archinnov.achilles.annotations.Column;
+//import info.archinnov.achilles.annotations.Column;
+import com.datastax.driver.mapping.annotations.Column;
 
 public abstract class AbstractVideo {
 
@@ -12,7 +13,7 @@ public abstract class AbstractVideo {
     @Column
     protected String name;
 
-    @Column("preview_image_location")
+    @Column(name = "preview_image_location")
     protected String previewImageLocation;
 
     public String getName() {

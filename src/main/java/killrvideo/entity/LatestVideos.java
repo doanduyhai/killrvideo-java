@@ -4,15 +4,15 @@ import java.util.Date;
 import java.util.Optional;
 import java.util.UUID;
 
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+
 import killrvideo.utils.TypeConverter;
-import killrvideo.video_catalog.VideoCatalogServiceOuterClass;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 
-@Table(keyspace = Schema.KEYSPACE, table = "latest_videos")
-public class LatestVideos extends AbstractVideoList{
+@Table(keyspace = Schema.KEYSPACE, name = "latest_videos")
+public class LatestVideos extends AbstractVideoList {
 
     @PartitionKey
     private String yyyymmdd;

@@ -7,14 +7,19 @@ import javax.validation.constraints.NotNull;
 
 import org.hibernate.validator.constraints.NotBlank;
 
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+//import info.archinnov.achilles.annotations.Column;
+//import info.archinnov.achilles.annotations.PartitionKey;
+//import info.archinnov.achilles.annotations.Table;
+
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+
 import killrvideo.user_management.UserManagementServiceOuterClass;
 import killrvideo.user_management.UserManagementServiceOuterClass.UserProfile;
 import killrvideo.utils.TypeConverter;
 
-@Table(keyspace = Schema.KEYSPACE, table = "users")
+@Table(keyspace = Schema.KEYSPACE, name = "users")
 public class User {
 
     @PartitionKey
@@ -33,7 +38,7 @@ public class User {
     private String email;
 
     @NotNull
-    @Column("created_date")
+    @Column(name = "created_date")
     private Date createdAt;
 
     public User() {
