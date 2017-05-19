@@ -3,12 +3,12 @@ package killrvideo.service;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.Session;
-import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
@@ -52,6 +52,8 @@ public class SearchService extends AbstractSearchService {
     private Session session;
     private String tagsByLetterTableName;
     private String videosByTagTableName;
+    private PreparedStatement searchVideos_getVideosByTagPrepared;
+    private PreparedStatement getQuerySuggestions_getTagsPrepared;
 
     @PostConstruct
     public void init() {
@@ -59,6 +61,22 @@ public class SearchService extends AbstractSearchService {
 
         tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
         videosByTagTableName = videosByTagMapper.getTableMetadata().getName();
+
+        searchVideos_getVideosByTagPrepared = session.prepare(
+                QueryBuilder
+                        .select()
+                        .all()
+                        .from(Schema.KEYSPACE, videosByTagTableName)
+                        .where(QueryBuilder.eq("tag", QueryBuilder.bindMarker()))
+        );
+
+        getQuerySuggestions_getTagsPrepared = session.prepare(
+                QueryBuilder
+                        .select()
+                        .from(Schema.KEYSPACE, tagsByLetterTableName)
+                        .where(QueryBuilder.eq("first_letter", QueryBuilder.bindMarker()))
+                        .and(QueryBuilder.gte("tag", QueryBuilder.bindMarker()))
+        );
     }
 
     @Override
@@ -74,15 +92,10 @@ public class SearchService extends AbstractSearchService {
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
 
-        //:TODO make prepared statement
-        BuiltStatement statement = QueryBuilder
-                .select()
-                .all()
-                .from(Schema.KEYSPACE, videosByTagTableName)
-                .where(QueryBuilder.eq("tag", request.getQuery()));
+        BoundStatement statement = searchVideos_getVideosByTagPrepared.bind()
+                .setString("tag", request.getQuery());
 
-        statement
-                .setFetchSize(request.getPageSize());
+        statement.setFetchSize(request.getPageSize());
 
         //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
         if (pagingState.isPresent()) {
@@ -130,15 +143,11 @@ public class SearchService extends AbstractSearchService {
             return;
         }
 
-        //:TODO Make prepared statement
-        BuiltStatement statement = QueryBuilder
-                .select()
-                .from(Schema.KEYSPACE, tagsByLetterTableName)
-                .where(QueryBuilder.eq("first_letter", request.getQuery().substring(0, 1)))
-                .and(QueryBuilder.gte("tag", request.getQuery()));
+        BoundStatement statement = getQuerySuggestions_getTagsPrepared.bind()
+                .setString("first_letter", request.getQuery().substring(0, 1))
+                .setString("tag", request.getQuery());
 
-        statement
-                .setFetchSize(request.getPageSize());
+        statement.setFetchSize(request.getPageSize());
 
         FutureUtils.buildCompletableFuture(tagsByLetterMapper.mapAsync(session.executeAsync(statement)))
                 .handle((tags, ex) -> {
