@@ -101,7 +101,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
          *
          * Note I am not using QueryBuilder with bindmarker() for these
          * statements.  This is not a value judgement, just a different way of doing it.
-         * Take a look at some of the other services to see bindmarker() examples.
+         * Take a look at some of the other services to see QueryBuilder.bindmarker() examples.
          */
 
         // Prepared statements for getLatestVideoPreviews()

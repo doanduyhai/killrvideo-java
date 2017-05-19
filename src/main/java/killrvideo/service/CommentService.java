@@ -63,6 +63,10 @@ public class CommentService extends AbstractCommentsService {
     private String commentsByVideoTableName;
     private PreparedStatement commentsByUserPrepared;
     private PreparedStatement commentsByVideoPrepared;
+    private PreparedStatement getUserComments_startingPointPrepared;
+    private PreparedStatement getUserComments_noStartingPointPrepared;
+    private PreparedStatement getVideoComments_startingPointPrepared;
+    private PreparedStatement getVideoComments_noStartingPointPrepared;
 
     @PostConstruct
     public void init(){
@@ -74,6 +78,10 @@ public class CommentService extends AbstractCommentsService {
          * and 2) we only want to load the prepared statements once at
          * the start of the service.  From here the prepared statements should
          * be cached on our Cassandra nodes.
+         *
+         * Alrighty, here is a case where I provide prepared statements
+         * both with and without using QueryBuilder. The end result is essentially
+         * the same and the one you choose largely comes down to style.
          */
 
         commentsByUserTableName = commentsByUserMapper.getTableMetadata().getName();
@@ -90,6 +98,68 @@ public class CommentService extends AbstractCommentsService {
                 "INSERT INTO " + Schema.KEYSPACE + ".comments_by_video " +
                         "(videoid, commentid, comment, userid) " +
                         "VALUES (?, ?, ?, ?)"
+        );
+
+        // Prepared statements for getUserComments()
+        /**
+         * Notice below I execute fcall() to pull the timestamp out of the
+         * commentid timeuuid field, yet I am using the @Computed annotation
+         * to do the same thing within the CommentsByUser entity for the dateOfComment
+         * field.  I do this because I am using QueryBuilder for the query below.
+         * @Computed is only supported when using the mapper stated per
+         * http://docs.datastax.com/en/drivers/java/3.2/com/datastax/driver/mapping/annotations/Computed.html.
+         * So, I essentially have 2 ways to get the timestamp out of my timeUUID column
+         * depending on the type of query I am performing.
+         */
+        getUserComments_noStartingPointPrepared = session.prepare(
+                QueryBuilder
+                        .select()
+                        .column("userid")
+                        .column("commentid")
+                        .column("videoid")
+                        .column("comment")
+                        .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
+                        .from(Schema.KEYSPACE, commentsByUserTableName)
+                        .where(QueryBuilder.eq("userid", QueryBuilder.bindMarker()))
+        );
+
+        getUserComments_startingPointPrepared = session.prepare(
+                QueryBuilder
+                        .select()
+                        .column("userid")
+                        .column("commentid")
+                        .column("videoid")
+                        .column("comment")
+                        .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
+                        .from(Schema.KEYSPACE, commentsByUserTableName)
+                        .where(QueryBuilder.eq("userid", QueryBuilder.bindMarker()))
+                        .and(QueryBuilder.lte("commentid", QueryBuilder.bindMarker()))
+        );
+
+        // Prepared statements for getVideoComments()
+        getVideoComments_noStartingPointPrepared = session.prepare(
+                QueryBuilder
+                    .select()
+                    .column("videoid")
+                    .column("commentid")
+                    .column("userid")
+                    .column("comment")
+                    .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
+                    .from(Schema.KEYSPACE, commentsByVideoTableName)
+                    .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
+        );
+
+        getVideoComments_startingPointPrepared = session.prepare(
+                QueryBuilder
+                        .select()
+                        .column("videoid")
+                        .column("commentid")
+                        .column("userid")
+                        .column("comment")
+                        .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
+                        .from(Schema.KEYSPACE, commentsByVideoTableName)
+                        .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
+                        .and(QueryBuilder.lte("commentid", QueryBuilder.bindMarker()))
         );
     }
 
@@ -166,7 +236,7 @@ public class CommentService extends AbstractCommentsService {
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
 
-        BuiltStatement statement;
+        BoundStatement statement;
 
         /**
          * Query without startingCommentId to get a reference point
@@ -175,19 +245,8 @@ public class CommentService extends AbstractCommentsService {
          */
         if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
             LOGGER.debug("Query without startingCommentId");
-            statement = QueryBuilder
-                    .select()
-                    .column("userid")
-                    .column("commentid")
-                    .column("videoid")
-                    .column("comment")
-                    .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
-                    .from(Schema.KEYSPACE, commentsByUserTableName)
-                    .where(QueryBuilder.eq("userid", fromString(userId.getValue())));
-
-            statement
-                    .setFetchSize(request.getPageSize());
-
+            statement = getUserComments_noStartingPointPrepared.bind()
+                    .setUUID("userid", fromString(userId.getValue()));
         }
 
         /**
@@ -196,21 +255,12 @@ public class CommentService extends AbstractCommentsService {
          */
         else {
             LOGGER.debug("Query WITH startingCommentId");
-            statement = QueryBuilder
-                    .select()
-                    .column("userid")
-                    .column("commentid")
-                    .column("videoid")
-                    .column("comment")
-                    .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
-                    .from(Schema.KEYSPACE, commentsByUserTableName)
-                    .where(QueryBuilder.eq("userid", fromString(userId.getValue())))
-                    .and(QueryBuilder.lte("commentid", fromString(startingCommentId.getValue())));
-
-            statement
-                    .setFetchSize(request.getPageSize());
-
+            statement = getUserComments_startingPointPrepared.bind()
+                    .setUUID("userid", fromString(userId.getValue()))
+                    .setUUID("commentid", fromString(startingCommentId.getValue()));
         }
+
+        statement.setFetchSize(request.getPageSize());
 
         //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
         if (pagingStateString.isPresent()) {
@@ -276,8 +326,7 @@ public class CommentService extends AbstractCommentsService {
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
 
-        //:TODO must prepare the following statements correctly to be proper async
-        BuiltStatement statement;
+        BoundStatement statement;
 
         /**
          * Query without startingCommentId to get a reference point
@@ -286,30 +335,9 @@ public class CommentService extends AbstractCommentsService {
          */
         if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
 
-            /**
-             * Notice below I execute fcall() to pull the timestamp out of the
-             * commentid timeuuid field, yet I am using the @Computed annotation
-             * to do the same thing within the CommentsByVideo entity for the dateOfComment
-             * field.  I do this because I am using QueryBuilder for the query below.
-             * @Computed is only supported when using the mapper stated per
-             * http://docs.datastax.com/en/drivers/java/3.2/com/datastax/driver/mapping/annotations/Computed.html.
-             * So, I essentially have 2 ways to get the timestamp out of my timeUUID column
-             * depending on the type of query I am performing.
-             */
             LOGGER.debug("Query without startingCommentId");
-            statement = QueryBuilder
-                    .select()
-                    .column("videoid")
-                    .column("commentid")
-                    .column("userid")
-                    .column("comment")
-                    .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
-                    .from(Schema.KEYSPACE, commentsByVideoTableName)
-                    .where(QueryBuilder.eq("videoid", fromString(videoId.getValue())));
-
-            statement
-                    .setFetchSize(request.getPageSize());
-
+            statement = getVideoComments_noStartingPointPrepared.bind()
+                    .setUUID("videoid", fromString(videoId.getValue()));
         }
         /**
          * Subsequent requests always provide startingCommentId to load page
@@ -317,20 +345,12 @@ public class CommentService extends AbstractCommentsService {
          */
         else {
             LOGGER.debug("Query WITH startingCommentId");
-            statement = QueryBuilder
-                    .select()
-                    .column("videoid")
-                    .column("commentid")
-                    .column("userid")
-                    .column("comment")
-                    .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
-                    .from(Schema.KEYSPACE, commentsByVideoTableName)
-                    .where(QueryBuilder.eq("videoid", fromString(videoId.getValue())))
-                    .and(QueryBuilder.lte("commentid", fromString(startingCommentId.getValue())));
-
-            statement
-                    .setFetchSize(request.getPageSize());
+            statement = getVideoComments_startingPointPrepared.bind()
+                    .setUUID("videoid", fromString(videoId.getValue()))
+                    .setUUID("commentid", fromString(startingCommentId.getValue()));
         }
+
+        statement.setFetchSize(request.getPageSize());
 
         //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
         if (pagingStateString.isPresent()) {

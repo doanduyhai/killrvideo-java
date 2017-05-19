@@ -36,11 +36,11 @@ public class CommentsByVideo {
      * In order to properly use the @Computed annotation for dateOfComment
      * you must execute a query using the mapper with this entity, NOT QueryBuilder.
      * If QueryBuilder is used you must use a call to fcall() and pass the CQL function
-     * needed to it directly.  Here is an example pulled from the CommentsByVideo.getVideoComments().
+     * needed to it directly.  Here is an example pulled from CommentsByVideo.getVideoComments().
      * fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
      * This will execute the toTimeStamp() function against the commentid column and return the
-     * result with an alias of comment_timestamp.  Again, reference CommentsByVideo.getVideoComments()
-     * for examples of how to implement.
+     * result with an alias of comment_timestamp.  Again, reference CommentService.getUserComments()
+     * or CommentService.getVideoComments() for examples of how to implement.
      */
     @NotNull
     @Computed("toTimestamp(commentid)")

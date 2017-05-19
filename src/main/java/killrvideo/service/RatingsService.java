@@ -98,14 +98,14 @@ public class RatingsService extends AbstractRatingsService {
          * Insert the rating into video_ratings_by_user
          */
         //:TODO Potential to make this a prepared statement
-        //:TODO This is not async, use saveAsync instead
+        //:TODO This is not async??, use saveAsync instead
         /**
          * Per http://docs.datastax.com/en/drivers/java-dse/1.2/ saveAsync
          * it says the following "public ListenableFuture<Void> saveAsync(T entity)
          * Saves an entity mapped by this mapper asynchronously.
          * This method is basically equivalent to: getManager().getSession().executeAsync(saveQuery(entity))."
          * This is effectively what I have below, but in talking with Olivier I thought the
-         * response was using saveQuery was blocking.  I may be misunderstanding, need clarification on this.
+         * response was using saveQuery is blocking.  I may be misunderstanding, need clarification on this.
          */
         Statement ratingInsertQuery = videoRatingByUserMapper
                 .saveQuery(new VideoRatingByUser(videoId, userId, rating));
