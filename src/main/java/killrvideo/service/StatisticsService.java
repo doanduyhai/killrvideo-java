@@ -11,6 +11,8 @@ import java.util.stream.Collectors;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
@@ -52,12 +54,20 @@ public class StatisticsService extends AbstractStatisticsService {
 
     Session session;
     private String videoPlaybackStatsTableName;
+    private PreparedStatement recordPlaybackStarted_incrStatsPrepared;
 
     @PostConstruct
     public void init(){
         this.session = manager.getSession();
 
         videoPlaybackStatsTableName = videoPlaybackStatsMapper.getTableMetadata().getName();
+
+        recordPlaybackStarted_incrStatsPrepared = session.prepare(
+                QueryBuilder
+                        .update(Schema.KEYSPACE, videoPlaybackStatsTableName)
+                        .with(QueryBuilder.incr("views")) //use incr() call to increment my counter field https://docs.datastax.com/en/developer/java-driver/3.2/faq/#how-do-i-increment-counters-with-query-builder
+                        .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
+        );
     }
 
     @Override
@@ -77,13 +87,10 @@ public class StatisticsService extends AbstractStatisticsService {
          * a mutation log file for later replay by another
          * micro-service
          */
-        //:TODO Use QueryBuilder in prepared statement with bindmarker()
-        BuiltStatement statement = QueryBuilder
-                .update(Schema.KEYSPACE, videoPlaybackStatsTableName)
-                .with(QueryBuilder.incr("views")) //use incr() call to increment my counter field https://docs.datastax.com/en/developer/java-driver/3.2/faq/#how-do-i-increment-counters-with-query-builder
-                .where(QueryBuilder.eq("videoid", videoId));
+        BoundStatement bound = recordPlaybackStarted_incrStatsPrepared.bind()
+                .setUUID("videoid", videoId);
 
-        FutureUtils.buildCompletableFuture(session.executeAsync(statement))
+        FutureUtils.buildCompletableFuture(session.executeAsync(bound))
                 .handle((rs, ex) -> {
                     if (rs != null) {
                         responseObserver.onNext(RecordPlaybackStartedResponse.newBuilder().build());

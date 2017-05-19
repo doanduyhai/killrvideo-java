@@ -3,6 +3,7 @@ package killrvideo.service;
 
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -64,6 +65,9 @@ public class UserManagementService extends AbstractUserManagementService {
     Session session;
     private String usersTableName;
     private String userCredentialsTableName;
+    private PreparedStatement createUser_checkEmailPrepared;
+    private PreparedStatement createUser_insertUserPrepared;
+    private PreparedStatement getUserProfile_getUsersPrepared;
 
     @PostConstruct
     public void init(){
@@ -71,6 +75,34 @@ public class UserManagementService extends AbstractUserManagementService {
 
         usersTableName = userMapper.getTableMetadata().getName();
         userCredentialsTableName = userCredentialsMapper.getTableMetadata().getName();
+
+        createUser_checkEmailPrepared = session.prepare(
+                QueryBuilder
+                        .insertInto(Schema.KEYSPACE, userCredentialsTableName)
+                        .value("email", QueryBuilder.bindMarker())
+                        .value("password", QueryBuilder.bindMarker())
+                        .value("userid", QueryBuilder.bindMarker())
+                        .ifNotExists() // use lightweight transaction
+        );
+
+        createUser_insertUserPrepared = session.prepare(
+                QueryBuilder
+                        .insertInto(Schema.KEYSPACE, usersTableName)
+                        .value("userid", QueryBuilder.bindMarker())
+                        .value("firstname", QueryBuilder.bindMarker())
+                        .value("lastname", QueryBuilder.bindMarker())
+                        .value("email", QueryBuilder.bindMarker())
+                        .value("created_date", QueryBuilder.bindMarker())
+                        .ifNotExists() // use lightweight transaction
+        );
+
+        getUserProfile_getUsersPrepared = session.prepare(
+                QueryBuilder
+                        .select()
+                        .all()
+                        .from(Schema.KEYSPACE, usersTableName)
+                        .where(QueryBuilder.in("userid", QueryBuilder.bindMarker()))
+        );
     }
 
     @Override
@@ -100,15 +132,15 @@ public class UserManagementService extends AbstractUserManagementService {
         /**
          * We insert first the credentials since
          * the LWT condition is on the user email
+         *
+         * Note, the LWT condition is set up at the prepared statement
          */
-        //:TODO Use QueryBuilder in prepared statement with bindmarker()
-        BuiltStatement checkEmailQuery = QueryBuilder
-                .insertInto(Schema.KEYSPACE, userCredentialsTableName)
-                .value("email", email)
-                .value("password", hashedPassword)
-                .value("userid", userId)
-                .ifNotExists(); // use lightweight transaction
+        BoundStatement checkEmailQuery = createUser_checkEmailPrepared.bind()
+                .setString("email", email)
+                .setString("password", hashedPassword)
+                .setUUID("userid", userId);
 
+        //:TODO Possibly make this an async call
         ResultSet checkEmailResult = session.execute(checkEmailQuery);
 
         /** Check the result of the LWT, if it's false
@@ -129,15 +161,12 @@ public class UserManagementService extends AbstractUserManagementService {
          * No LWT error, we can proceed further
          */
         if (!emailAlreadyExists.get()) {
-            //:TODO Use QueryBuilder in prepared statement with bindmarker()
-            BuiltStatement userInsert = QueryBuilder
-                    .insertInto(Schema.KEYSPACE, usersTableName)
-                    .value("userid", userId)
-                    .value("firstname", request.getFirstName())
-                    .value("lastname", request.getLastName())
-                    .value("email", email)
-                    .value("created_date", now)
-                    .ifNotExists(); // use lightweight transaction
+            BoundStatement insertUser = createUser_insertUserPrepared.bind()
+                    .setUUID("userid", userId)
+                    .setString("firstname", request.getFirstName())
+                    .setString("lastname", request.getLastName())
+                    .setString("email", email)
+                    .setTimestamp("created_date", now);
 
             /**
              * Note throughout most of the other service code I use the FutureUtils
@@ -145,7 +174,7 @@ public class UserManagementService extends AbstractUserManagementService {
              * CompletableFuture and handle callbacks.  I left this more "direct"
              * callback in place as an example as if I were not using FutureUtils.
              */
-            Futures.addCallback(session.executeAsync(userInsert),
+            Futures.addCallback(session.executeAsync(insertUser),
                     new FutureCallback<ResultSet>() {
                         @Override
                         public void onSuccess(@Nullable ResultSet result) {
@@ -257,14 +286,10 @@ public class UserManagementService extends AbstractUserManagementService {
          * the IN(..) clause to fetch multiple user infos. It is recommended
          * to limit the number of values inside the IN clause to a dozen
          */
-        //:TODO Use QueryBuilder in prepared statement with bindmarker()
-        BuiltStatement bs = QueryBuilder
-                .select()
-                .all()
-                .from(Schema.KEYSPACE, usersTableName)
-                .where(QueryBuilder.in("userid", userIds));
+        BoundStatement getUsersQuery = getUserProfile_getUsersPrepared.bind()
+                .setList(0, Arrays.asList(userIds), UUID.class);
 
-        FutureUtils.buildCompletableFuture(userMapper.mapAsync(session.executeAsync(bs)))
+        FutureUtils.buildCompletableFuture(userMapper.mapAsync(session.executeAsync(getUsersQuery)))
                 .handle((users, ex) -> {
                     if (users != null) {
                         users.forEach(user -> builder.addProfiles(user.toUserProfile()));
