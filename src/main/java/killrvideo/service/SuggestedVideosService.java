@@ -1,35 +1,24 @@
 package killrvideo.service;
 
-import static java.util.UUID.fromString;
-import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
 import com.datastax.driver.core.ResultSetFuture;
-import com.datastax.driver.core.ResultSet;
-import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.mapping.MappingManager;
 import com.datastax.driver.mapping.Result;
 import killrvideo.entity.*;
-import killrvideo.utils.FutureUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.map.HashedMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import com.google.common.util.concurrent.Uninterruptibles;
-
-//import info.archinnov.achilles.generated.manager.VideoByTag_Manager;
-//import info.archinnov.achilles.generated.manager.Video_Manager;
 import com.datastax.driver.mapping.Mapper;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -84,26 +73,20 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
         /**
          * Load the source video
          */
-//        final Video video = videoManager
-//                .dsl()
-//                .select()
-//                .allColumns_FromBaseTable()
-//                .where()
-//                .videoid().Eq(videoId)
-//                .getOne();
-
+        //:TODO Review to determine if synchronous get() is ok here
         final Video video = videoMapper.get(videoId);
 
         if (video == null) {
             returnNoResult(responseObserver, builder);
-        } else {
 
+        } else {
             /**
              * Return immediately if the source video has
              * no tags
              */
             if (CollectionUtils.isEmpty(video.getTags())) {
                 returnNoResult(responseObserver, builder);
+
             } else {
                 final List<String> tags = new ArrayList<>(video.getTags());
                 Map<Uuid, SuggestedVideoPreview> results = new HashedMap();
@@ -114,8 +97,6 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                  * as well as duplicates
                  **/
                 final int pageSize = RELATED_VIDEOS_TO_RETURN * 2;
-
-                //final List<CompletableFuture<List<VideoByTag>>> inFlightQueries = new ArrayList<>();
                 final List<ResultSetFuture> inFlightQueries = new ArrayList<>();
 
                 /** Kick off a query for each tag and track them in the inflight requests list **/
@@ -124,15 +105,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
 
                     ResultSetFuture listAsync;
 
-//                    final CompletableFuture<List<VideoByTag>> listAsync = videoByTagManager
-//                            .dsl()
-//                            .select()
-//                            .allColumns_FromBaseTable()
-//                            .where()
-//                            .tag().Eq(tag)
-//                            .withFetchSize(pageSize)
-//                            .getListAsync();
-
+                    //:TODO Use QueryBuilder in prepared statement with bindmarker()
                     BuiltStatement statement = QueryBuilder
                             .select().all()
                             .from(Schema.KEYSPACE, videoByTagTableName)
@@ -141,19 +114,13 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                     statement
                             .setFetchSize(pageSize);
 
-                    listAsync = session.executeAsync(statement);
-                    //FutureUtils.buildCompletableFuture(listAsync)
-                    inFlightQueries.add(listAsync);
+                    inFlightQueries.add(session.executeAsync(statement));
 
                     /** Every third query, or if this is the last tag, wait on all the query results **/
                     if (inFlightQueries.size() == 3 || i == tags.size() - 1) {
-
-                        //for (CompletableFuture<List<VideoByTag>> future : inFlightQueries) {
                         for (ResultSetFuture future : inFlightQueries) {
-                            //ResultSet futureResults = future.getUninterruptibly();
-                            //List<Row> rows = futureResult.all();
-
                             try {
+                                //TODO: Potentially move away from getUninterruptibly() and move to async results
                                 Result<VideoByTag> videos = videoByTagMapper.map(future.getUninterruptibly());
                                 results.putAll(videos.all()
                                         .stream()
@@ -190,7 +157,6 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
         responseObserver.onCompleted();
 
         LOGGER.debug("End getting related videos with 0 video");
-
     }
 
     @Override

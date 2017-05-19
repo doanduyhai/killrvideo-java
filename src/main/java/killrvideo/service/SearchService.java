@@ -59,7 +59,6 @@ public class SearchService extends AbstractSearchService {
 
         tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
         videosByTagTableName = videosByTagMapper.getTableMetadata().getName();
-
     }
 
     @Override
@@ -75,6 +74,7 @@ public class SearchService extends AbstractSearchService {
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
 
+        //:TODO make prepared statement
         BuiltStatement statement = QueryBuilder
                 .select()
                 .all()
@@ -113,7 +113,6 @@ public class SearchService extends AbstractSearchService {
                         LOGGER.debug("End searching video by tag");
 
                     } else if (ex != null) {
-
                         LOGGER.error("Exception when searching video by tag : " + mergeStackTrace(ex));
 
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
@@ -131,6 +130,7 @@ public class SearchService extends AbstractSearchService {
             return;
         }
 
+        //:TODO Make prepared statement
         BuiltStatement statement = QueryBuilder
                 .select()
                 .from(Schema.KEYSPACE, tagsByLetterTableName)

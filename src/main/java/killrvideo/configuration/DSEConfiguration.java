@@ -26,12 +26,6 @@ public class DSEConfiguration {
     @Bean
     public Mapper<CommentsByVideo> commentsByVideoMapper() { return manager.mapper(CommentsByVideo.class); }
 
-//
-//    @Bean
-//    public EncodingJobNotification_Manager encodingJobNotificationManager() {
-//        return managerFactory.forEncodingJobNotification();
-//    }
-//
     @Bean
     public Mapper<LatestVideos> latestVideosMapper() { return manager.mapper(LatestVideos.class); }
 
@@ -60,14 +54,4 @@ public class DSEConfiguration {
 
     @Bean
     public Mapper<VideoRatingByUser> videoRatingByUserMapper() { return manager.mapper(VideoRatingByUser.class); }
-//
-//    @Bean
-//    public VideoRecommandationsByVideo_Manager videoRecommandationsByVideoManager() {
-//        return managerFactory.forVideoRecommandationsByVideo();
-//    }
-//
-//    @Bean
-//    public VideoRecommendations_Manager videoRecommendationsManager() {
-//        return managerFactory.forVideoRecommendations();
-//    }
 }

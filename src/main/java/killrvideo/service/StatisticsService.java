@@ -77,6 +77,7 @@ public class StatisticsService extends AbstractStatisticsService {
          * a mutation log file for later replay by another
          * micro-service
          */
+        //:TODO Use QueryBuilder in prepared statement with bindmarker()
         BuiltStatement statement = QueryBuilder
                 .update(Schema.KEYSPACE, videoPlaybackStatsTableName)
                 .with(QueryBuilder.incr("views")) //use incr() call to increment my counter field https://docs.datastax.com/en/developer/java-driver/3.2/faq/#how-do-i-increment-counters-with-query-builder

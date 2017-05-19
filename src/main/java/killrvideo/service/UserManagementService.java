@@ -5,7 +5,6 @@ import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 import java.util.Date;
 import java.util.UUID;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.annotation.Nullable;
@@ -14,12 +13,9 @@ import javax.inject.Inject;
 
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.querybuilder.BuiltStatement;
-import com.datastax.driver.core.utils.MoreFutures;
-import com.datastax.driver.mapping.Result;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
-import killrvideo.entity.CommentsByVideo;
 import killrvideo.entity.Schema;
 import killrvideo.utils.FutureUtils;
 import org.apache.commons.collections4.CollectionUtils;
@@ -29,13 +25,9 @@ import org.springframework.stereotype.Service;
 
 import com.google.common.eventbus.EventBus;
 
-//import info.archinnov.achilles.generated.manager.UserCredentials_Manager;
-//import info.archinnov.achilles.generated.manager.User_Manager;
-
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
-
 
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -109,7 +101,7 @@ public class UserManagementService extends AbstractUserManagementService {
          * We insert first the credentials since
          * the LWT condition is on the user email
          */
-        //UserCredentials credentials = new UserCredentials(email, hashedPassword, userId);
+        //:TODO Use QueryBuilder in prepared statement with bindmarker()
         BuiltStatement checkEmailQuery = QueryBuilder
                 .insertInto(Schema.KEYSPACE, userCredentialsTableName)
                 .value("email", email)
@@ -124,7 +116,7 @@ public class UserManagementService extends AbstractUserManagementService {
          * table and must not be duplicated.
          * Note the use of wasApplied(), this is a convenience method
          * described here ->
-         * http://docs.datastax.com/en/drivers/java/2.1/com/datastax/driver/core/ResultSet.html#wasApplied--
+         * http://docs.datastax.com/en/drivers/java/3.2/com/datastax/driver/core/ResultSet.html#wasApplied--
          * that allows an easy check of a conditional statement.
          */
         if (!checkEmailResult.wasApplied()) {
@@ -137,8 +129,7 @@ public class UserManagementService extends AbstractUserManagementService {
          * No LWT error, we can proceed further
          */
         if (!emailAlreadyExists.get()) {
-            /*Statement userInsert = userMapper
-                    .saveQuery(new User(userId, request.getFirstName(), request.getLastName(), email, now));*/
+            //:TODO Use QueryBuilder in prepared statement with bindmarker()
             BuiltStatement userInsert = QueryBuilder
                     .insertInto(Schema.KEYSPACE, usersTableName)
                     .value("userid", userId)
@@ -148,12 +139,16 @@ public class UserManagementService extends AbstractUserManagementService {
                     .value("created_date", now)
                     .ifNotExists(); // use lightweight transaction
 
-            ResultSetFuture userResultsFuture = session.executeAsync(userInsert);
-            Futures.addCallback(userResultsFuture,
+            /**
+             * Note throughout most of the other service code I use the FutureUtils
+             * utility class with the buildCompletableFuture() method to create a
+             * CompletableFuture and handle callbacks.  I left this more "direct"
+             * callback in place as an example as if I were not using FutureUtils.
+             */
+            Futures.addCallback(session.executeAsync(userInsert),
                     new FutureCallback<ResultSet>() {
                         @Override
                         public void onSuccess(@Nullable ResultSet result) {
-
                             /** Check to see if userInsert was applied.
                              * userId should be unique, if not, the insert
                              * should fail
@@ -192,7 +187,6 @@ public class UserManagementService extends AbstractUserManagementService {
                     MoreExecutors.sameThreadExecutor()
             );
         }
-
     }
 
     @Override
@@ -209,6 +203,7 @@ public class UserManagementService extends AbstractUserManagementService {
          * entity I can simply pass it to the mapper get() method
          * to get my result
          */
+        //:TODO Potentially update to make an async call
         final UserCredentials one = userCredentialsMapper
                 .get(request.getEmail());
 
@@ -250,27 +245,26 @@ public class UserManagementService extends AbstractUserManagementService {
             return;
         }
 
+        //:TODO Maybe replace new UUID[size] with lambda equivalent
         final UUID[] userIds = request
                 .getUserIdsList()
                 .stream()
                 .map(uuid -> UUID.fromString(uuid.getValue()))
                 .toArray(size -> new UUID[size]);
 
-        LOGGER.debug("userId list is: " + userIds[0]);
-
         /**
          * Instead of firing multiple async SELECT, we can as well use
          * the IN(..) clause to fetch multiple user infos. It is recommended
          * to limit the number of values inside the IN clause to a dozen
          */
+        //:TODO Use QueryBuilder in prepared statement with bindmarker()
         BuiltStatement bs = QueryBuilder
                 .select()
                 .all()
                 .from(Schema.KEYSPACE, usersTableName)
                 .where(QueryBuilder.in("userid", userIds));
 
-        ResultSetFuture future = session.executeAsync(bs);
-        FutureUtils.buildCompletableFuture(userMapper.mapAsync(future))
+        FutureUtils.buildCompletableFuture(userMapper.mapAsync(session.executeAsync(bs)))
                 .handle((users, ex) -> {
                     if (users != null) {
                         users.forEach(user -> builder.addProfiles(user.toUserProfile()));
@@ -280,7 +274,6 @@ public class UserManagementService extends AbstractUserManagementService {
                         LOGGER.debug("End getting user profile");
 
                     } else if (ex != null) {
-
                         LOGGER.error("Exception getting user profile : " + mergeStackTrace(ex));
 
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
@@ -288,33 +281,5 @@ public class UserManagementService extends AbstractUserManagementService {
                     }
                     return users;
                 });
-
-//        BuiltStatement bs = QueryBuilder
-//                .select().all()
-//                .from(Schema.KEYSPACE,"users")
-//                .where(QueryBuilder.in("userid",userIds));
-//
-//        ResultSetFuture future = session.executeAsync(bs);
-//        Futures.addCallback(future,
-//                new FutureCallback<ResultSet>() {
-//                    @Override
-//                    public void onSuccess(@Nullable ResultSet result) {
-//                        Result<User> users = userMapper.map(result);
-//                        users.forEach(user -> builder.addProfiles(user.toUserProfile()));
-//                        responseObserver.onNext(builder.build());
-//                        responseObserver.onCompleted();
-//
-//                        LOGGER.debug("End getting user profile");
-//                    }
-//
-//                    @Override
-//                    public void onFailure(Throwable t) {
-//                        LOGGER.error("Exception getting user profile : " + mergeStackTrace(t));
-//
-//                        responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
-//                    }
-//                },
-//                MoreExecutors.sameThreadExecutor()
-//        );
     }
 }

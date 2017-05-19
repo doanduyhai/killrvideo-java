@@ -5,8 +5,6 @@ import static killrvideo.entity.Schema.KEYSPACE;
 import java.util.Date;
 import java.util.UUID;
 
-//import info.archinnov.achilles.annotations.*;
-
 import com.datastax.driver.mapping.annotations.Column;
 import com.datastax.driver.mapping.annotations.PartitionKey;
 import com.datastax.driver.mapping.annotations.Table;

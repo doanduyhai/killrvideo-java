@@ -1,10 +1,6 @@
 package killrvideo.entity;
 
-import java.util.UUID;
-
 import org.hibernate.validator.constraints.NotBlank;
-
-//import info.archinnov.achilles.annotations.Column;
 import com.datastax.driver.mapping.annotations.Column;
 
 public abstract class AbstractVideo {

@@ -4,13 +4,10 @@ import java.util.Date;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.datastax.driver.mapping.annotations.ClusteringColumn;
-import com.datastax.driver.mapping.annotations.Column;
 import com.datastax.driver.mapping.annotations.PartitionKey;
 import com.datastax.driver.mapping.annotations.Table;
 
 import killrvideo.utils.TypeConverter;
-import killrvideo.video_catalog.VideoCatalogServiceOuterClass;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 
 @Table(keyspace = Schema.KEYSPACE, name = "user_videos")

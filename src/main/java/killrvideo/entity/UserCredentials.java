@@ -8,10 +8,6 @@ import javax.validation.constraints.NotNull;
 
 import org.hibernate.validator.constraints.NotBlank;
 
-//import info.archinnov.achilles.annotations.Column;
-//import info.archinnov.achilles.annotations.PartitionKey;
-//import info.archinnov.achilles.annotations.Table;
-
 import com.datastax.driver.mapping.annotations.Column;
 import com.datastax.driver.mapping.annotations.PartitionKey;
 import com.datastax.driver.mapping.annotations.Table;

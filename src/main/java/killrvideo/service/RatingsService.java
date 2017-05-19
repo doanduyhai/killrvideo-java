@@ -14,6 +14,7 @@ import com.datastax.driver.core.Session;
 import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.google.common.util.concurrent.ListenableFuture;
 import killrvideo.entity.*;
 import killrvideo.utils.FutureUtils;
 import org.slf4j.Logger;
@@ -94,9 +95,17 @@ public class RatingsService extends AbstractRatingsService {
          * Insert the rating into video_ratings_by_user
          */
         //:TODO make this a proper prepared statement
+        //:TODO This is not async, use saveAsync instead
+        /**
+         * Per http://docs.datastax.com/en/drivers/java-dse/1.2/ saveAsync
+         * it says the following "public ListenableFuture<Void> saveAsync(T entity)
+         * Saves an entity mapped by this mapper asynchronously.
+         * This method is basically equivalent to: getManager().getSession().executeAsync(saveQuery(entity))."
+         * This is effectively what I have below, but in talking with Olivier I thought the
+         * response was using saveQuery was blocking.  I may be misunderstanding, need clarification on this.
+         */
         Statement ratingInsertQuery = videoRatingByUserMapper
                 .saveQuery(new VideoRatingByUser(videoId, userId, rating));
-
 
         /**
          * Here, instead of using logged batch, we can insert both mutations asynchronously
@@ -135,7 +144,6 @@ public class RatingsService extends AbstractRatingsService {
     public void getRating(GetRatingRequest request, StreamObserver<GetRatingResponse> responseObserver) {
 
         LOGGER.debug("-----Start get video rating request-----");
-        LOGGER.debug("Rating request is: " + request.toString());
 
         if (!validator.isValid(request, responseObserver)) {
             return;
@@ -144,8 +152,7 @@ public class RatingsService extends AbstractRatingsService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
 
         // videoId matches the partition key set in the VideoRating class
-        Statement videoRatingQuery = videoRatingMapper.getQuery(videoId);
-        ResultSetFuture resultsFuture = manager.getSession().executeAsync(videoRatingQuery);
+        ResultSetFuture resultsFuture = manager.getSession().executeAsync(videoRatingMapper.getQuery(videoId));
 
         FutureUtils.buildCompletableFuture(resultsFuture)
                 .handle((ratingResult, ex) -> {
@@ -190,9 +197,7 @@ public class RatingsService extends AbstractRatingsService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
         final UUID userId = UUID.fromString(request.getUserId().getValue());
 
-        Statement query = videoRatingByUserMapper.getQuery(videoId, userId);
-
-        FutureUtils.buildCompletableFuture(session.executeAsync(query))
+        FutureUtils.buildCompletableFuture(session.executeAsync(videoRatingByUserMapper.getQuery(videoId, userId)))
                 .handle((entity, ex) -> {
                     VideoRatingByUser videoRating = videoRatingByUserMapper.map(entity).one();
 

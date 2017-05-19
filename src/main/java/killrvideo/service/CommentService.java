@@ -57,9 +57,6 @@ public class CommentService extends AbstractCommentsService {
     EventBus eventBus;
 
     @Inject
-    ExecutorService executorService;
-
-    @Inject
     KillrVideoInputValidator validator;
 
     Session session;
@@ -71,6 +68,14 @@ public class CommentService extends AbstractCommentsService {
     @PostConstruct
     public void init(){
         this.session = manager.getSession();
+
+        /**
+         * Set the following up in PostConstruct because 1) we have to
+         * wait until after dependency injection for these to work,
+         * and 2) we only want to load the prepared statements once at
+         * the start of the service.  From here the prepared statements should
+         * be cached on our Cassandra nodes.
+         */
 
         commentsByUserTableName = commentsByUserMapper.getTableMetadata().getName();
         commentsByVideoTableName = commentsByVideoMapper.getTableMetadata().getName();
@@ -104,13 +109,7 @@ public class CommentService extends AbstractCommentsService {
         final UUID commentId = UUID.fromString(request.getCommentId().getValue());
         final String comment = request.getComment();
 
-        //:TODO Make these proper Async calls either with saveAsync or use prepared statements as in other areas
-//        final Statement s1 = commentsByUserMapper
-//                .saveQuery(new CommentsByUser(userId, commentId, videoId, comment));
-//
-//        final Statement s2 = commentsByVideoMapper
-//                .saveQuery(new CommentsByVideo(videoId, commentId, userId, comment));
-
+        //:TODO Potential future work to use the mapper with saveAsync()
         BoundStatement bs1 = commentsByUserPrepared.bind(
                 userId, commentId, comment, videoId
         );
@@ -129,7 +128,7 @@ public class CommentService extends AbstractCommentsService {
         batchStatement.add(bs2);
         batchStatement.setDefaultTimestamp(now.getTime());
 
-        FutureUtils.buildCompletableFuture(manager.getSession().executeAsync(batchStatement))
+        FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
             .handle((rs, ex) -> {
                 if(rs != null) {
                     eventBus.post(UserCommentedOnVideo.newBuilder()
@@ -144,7 +143,6 @@ public class CommentService extends AbstractCommentsService {
                     LOGGER.debug("End comment on video request");
 
                 } else if (ex != null) {
-
                     LOGGER.error("Exception commenting on video : " + mergeStackTrace(ex));
 
                     eventBus.post(new CassandraMutationError(request, ex));
@@ -259,7 +257,6 @@ public class CommentService extends AbstractCommentsService {
                         LOGGER.error("CATCH Exception getting user comments : " + mergeStackTrace(ex));
 
                     }
-
                     return commentResult;
 
                 });
@@ -291,7 +288,7 @@ public class CommentService extends AbstractCommentsService {
         if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
 
             /**
-             * Notice below I execute fcall() to pull the timstamp out of the
+             * Notice below I execute fcall() to pull the timestamp out of the
              * commentid timeuuid field, yet I am using the @Computed annotation
              * to do the same thing within the CommentsByVideo entity for the dateOfComment
              * field.  I do this because I am using QueryBuilder for the query below.

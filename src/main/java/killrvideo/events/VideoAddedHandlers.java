@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
@@ -41,9 +40,6 @@ public class VideoAddedHandlers {
     @Inject
     MappingManager manager;
 
-    @Inject
-    ExecutorService executorService;
-
     private Session session;
     private String videosByTagTableName;
     private String tagsByLetterTableName;
@@ -59,13 +55,14 @@ public class VideoAddedHandlers {
 
         // Prepared statements for handle()
         videosByTagPrepared = session.prepare(
-                "INSERT INTO " + Schema.KEYSPACE + ".videos_by_tag " +
+                "INSERT INTO " + Schema.KEYSPACE + "." + videosByTagTableName + " " +
                         "(tag, videoid, added_date, userid, name, preview_image_location, tagged_date) " +
                         "VALUES (?, ?, ?, ?, ?, ?, ?)"
         );
 
         tagsByLetterPrepared = session.prepare(
-                "INSERT INTO " + Schema.KEYSPACE + ".tags_by_letter (first_letter, tag) VALUES (?, ?)"
+                "INSERT INTO " + Schema.KEYSPACE + "." + tagsByLetterTableName + " " +
+                        "(first_letter, tag) VALUES (?, ?)"
         );
     }
 

@@ -1,15 +1,12 @@
 package killrvideo.entity;
 
 import static killrvideo.entity.Schema.KEYSPACE;
-import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
 import java.util.Date;
 import java.util.UUID;
 
-
 import javax.validation.constraints.NotNull;
 
-//import info.archinnov.achilles.annotations.*;
 import com.datastax.driver.mapping.annotations.Column;
 import com.datastax.driver.mapping.annotations.ClusteringColumn;
 import com.datastax.driver.mapping.annotations.PartitionKey;
