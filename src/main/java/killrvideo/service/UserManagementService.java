@@ -13,7 +13,6 @@ import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
 import com.datastax.driver.core.*;
-import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;

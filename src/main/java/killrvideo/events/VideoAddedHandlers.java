@@ -100,7 +100,13 @@ public class VideoAddedHandlers {
             );
 
 
-            //:TODO Make this completely async by using saveQueryAsync and build each statement in the batch with a future and handle
+            //:TODO Potential implement this with mapper async by using saveQueryAsync and build each statement in the batch with a future and handle
+            /**
+             * Technically, the prepared statements and bound statements with executeAsync()
+             * are just fine and work as expected, however, since these are such simple insert
+             * statements I can use the mapper and entities directly.  I would rather do that from
+             * an illustration standpoint and just need to work it out.
+             */
 //            batchStatement.add(
 //                    videosByTagMapper.saveQuery(
 //                            new VideoByTag(tag, videoId, userId, name, previewImageLocation, addedDate, taggedDate)

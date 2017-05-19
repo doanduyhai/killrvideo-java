@@ -9,12 +9,8 @@ import java.util.concurrent.CompletableFuture;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
-import com.datastax.driver.core.ResultSetFuture;
-import com.datastax.driver.core.Session;
-import com.datastax.driver.core.Statement;
-import com.datastax.driver.core.querybuilder.BuiltStatement;
+import com.datastax.driver.core.*;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
-import com.google.common.util.concurrent.ListenableFuture;
 import killrvideo.entity.*;
 import killrvideo.utils.FutureUtils;
 import org.slf4j.Logger;
@@ -57,12 +53,22 @@ public class RatingsService extends AbstractRatingsService {
 
     private Session session;
     private String videoRatingsTableName;
+    private PreparedStatement rateVideo_updateRatingPrepared;
+
 
     @PostConstruct
     public void init(){
         this.session = manager.getSession();
 
         videoRatingsTableName = videoRatingMapper.getTableMetadata().getName();
+
+        rateVideo_updateRatingPrepared = session.prepare(
+                QueryBuilder
+                        .update(Schema.KEYSPACE, videoRatingsTableName)
+                        .with(QueryBuilder.incr("rating_counter"))
+                        .and(QueryBuilder.incr("rating_total", QueryBuilder.bindMarker()))
+                        .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
+        );
     }
 
     @Override
@@ -84,17 +90,14 @@ public class RatingsService extends AbstractRatingsService {
          * Increment rating_counter by 1
          * Increment rating_total by amount of rating
          */
-        //:TODO make this a proper prepared statement
-        BuiltStatement counterUpdateStatement = QueryBuilder
-                .update(Schema.KEYSPACE, videoRatingsTableName)
-                .with(QueryBuilder.incr("rating_counter"))
-                .and(QueryBuilder.incr("rating_total", rating))
-                .where(QueryBuilder.eq("videoid", videoId));
+        BoundStatement counterUpdateStatement = rateVideo_updateRatingPrepared.bind()
+                .setLong("rating_total", rating)
+                .setUUID("videoid", videoId);
 
         /**
          * Insert the rating into video_ratings_by_user
          */
-        //:TODO make this a proper prepared statement
+        //:TODO Potential to make this a prepared statement
         //:TODO This is not async, use saveAsync instead
         /**
          * Per http://docs.datastax.com/en/drivers/java-dse/1.2/ saveAsync
@@ -152,12 +155,8 @@ public class RatingsService extends AbstractRatingsService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
 
         // videoId matches the partition key set in the VideoRating class
-        ResultSetFuture resultsFuture = manager.getSession().executeAsync(videoRatingMapper.getQuery(videoId));
-
-        FutureUtils.buildCompletableFuture(resultsFuture)
-                .handle((ratingResult, ex) -> {
-                    VideoRating ratings = videoRatingMapper.map(ratingResult).one();
-
+        FutureUtils.buildCompletableFuture(videoRatingMapper.getAsync(videoId))
+                .handle((ratings, ex) -> {
                     if (ex != null) {
                         LOGGER.error("Exception when getting video rating : " + mergeStackTrace(ex));
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
@@ -180,7 +179,7 @@ public class RatingsService extends AbstractRatingsService {
                         responseObserver.onCompleted();
                         LOGGER.debug("End get video rating request");
                     }
-                    return ratingResult;
+                    return ratings;
                 });
 
     }
@@ -197,10 +196,8 @@ public class RatingsService extends AbstractRatingsService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
         final UUID userId = UUID.fromString(request.getUserId().getValue());
 
-        FutureUtils.buildCompletableFuture(session.executeAsync(videoRatingByUserMapper.getQuery(videoId, userId)))
-                .handle((entity, ex) -> {
-                    VideoRatingByUser videoRating = videoRatingByUserMapper.map(entity).one();
-
+        FutureUtils.buildCompletableFuture(videoRatingByUserMapper.getAsync(videoId, userId))
+                .handle((videoRating, ex) -> {
                     if (ex != null) {
                         LOGGER.error("Exception when getting user rating : " + mergeStackTrace(ex));
 
@@ -225,7 +222,7 @@ public class RatingsService extends AbstractRatingsService {
                         responseObserver.onCompleted();
                         LOGGER.debug("End get user rating request");
                     }
-                    return entity;
+                    return videoRating;
                 });
     }
 
