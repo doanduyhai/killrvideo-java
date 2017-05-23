@@ -6,16 +6,12 @@ import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CompletableFuture;
 
-import javax.annotation.Nullable;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
 import com.datastax.driver.core.*;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.MoreExecutors;
 import killrvideo.entity.Schema;
 import killrvideo.utils.FutureUtils;
 import org.apache.commons.collections4.CollectionUtils;
@@ -61,7 +57,7 @@ public class UserManagementService extends AbstractUserManagementService {
     @Inject
     KillrVideoInputValidator validator;
 
-    Session session;
+    private Session session;
     private String usersTableName;
     private String userCredentialsTableName;
     private PreparedStatement createUser_checkEmailPrepared;
@@ -113,15 +109,8 @@ public class UserManagementService extends AbstractUserManagementService {
             return;
         }
 
-        Date now = new Date();
+        final Date now = new Date();
         final UUID userId = UUID.fromString(request.getUserId().getValue());
-
-        /**
-         * Boolean value to know whether we have intercepted
-         * a LightWeightTransaction error in the LightWeightTransaction
-         * result listener
-         */
-        final AtomicBoolean emailAlreadyExists = new AtomicBoolean(false);
 
         /** Trim the password **/
         final String hashedPassword = HashUtils.hashPassword(request.getPassword().trim());
@@ -134,61 +123,58 @@ public class UserManagementService extends AbstractUserManagementService {
          *
          * Note, the LWT condition is set up at the prepared statement
          */
-        BoundStatement checkEmailQuery = createUser_checkEmailPrepared.bind()
+        final BoundStatement checkEmailQuery = createUser_checkEmailPrepared.bind()
                 .setString("email", email)
                 .setString("password", hashedPassword)
                 .setUUID("userid", userId);
 
-        //:TODO Possibly make this an async call
-        ResultSet checkEmailResult = session.execute(checkEmailQuery);
+        FutureUtils.buildCompletableFuture(session.executeAsync(checkEmailQuery))
+                .handleAsync((rs, ex) -> {
+                    try {
+                        if (rs != null) {
+                            /** Check the result of the LWT, if it's false
+                             * the email already exists within our user_credentials
+                             * table and must not be duplicated.
+                             * Note the use of wasApplied(), this is a convenience method
+                             * described here ->
+                             * http://docs.datastax.com/en/drivers/java/3.2/com/datastax/driver/core/ResultSet.html#wasApplied--
+                             * that allows an easy check of a conditional statement.
+                             */
+                            if (rs.wasApplied()) {
+                                /**
+                                 * No LWT error, we can proceed further
+                                 */
+                                final BoundStatement insertUser = createUser_insertUserPrepared.bind()
+                                        .setUUID("userid", userId)
+                                        .setString("firstname", request.getFirstName())
+                                        .setString("lastname", request.getLastName())
+                                        .setString("email", email)
+                                        .setTimestamp("created_date", now);
 
-        /** Check the result of the LWT, if it's false
-         * the email already exists within our user_credentials
-         * table and must not be duplicated.
-         * Note the use of wasApplied(), this is a convenience method
-         * described here ->
-         * http://docs.datastax.com/en/drivers/java/3.2/com/datastax/driver/core/ResultSet.html#wasApplied--
-         * that allows an easy check of a conditional statement.
-         */
-        if (!checkEmailResult.wasApplied()) {
-            emailAlreadyExists.getAndSet(true);
-            responseObserver.onError(Status.INVALID_ARGUMENT.augmentDescription(exceptionMessage).asRuntimeException());
-            LOGGER.debug("exception is: " + exceptionMessage);
-        }
+                                return session.executeAsync(insertUser);
 
-        /**
-         * No LWT error, we can proceed further
-         */
-        if (!emailAlreadyExists.get()) {
-            BoundStatement insertUser = createUser_insertUserPrepared.bind()
-                    .setUUID("userid", userId)
-                    .setString("firstname", request.getFirstName())
-                    .setString("lastname", request.getLastName())
-                    .setString("email", email)
-                    .setTimestamp("created_date", now);
+                            } else {
+                                throw new Throwable(exceptionMessage);
+                            }
+                        }
+                        return null;
 
-            /**
-             * Note throughout most of the other service code I use the FutureUtils
-             * utility class with the buildCompletableFuture() method to create a
-             * CompletableFuture and handle callbacks.  I left this more "direct"
-             * callback in place as an example as if I were not using FutureUtils.
-             */
-            Futures.addCallback(session.executeAsync(insertUser),
-                    new FutureCallback<ResultSet>() {
-                        @Override
-                        public void onSuccess(@Nullable ResultSet result) {
+                    } catch (Throwable t) {
+                        final String message = t.getMessage();
+                        responseObserver.onError(Status.INVALID_ARGUMENT.augmentDescription(message).asRuntimeException());
+                        LOGGER.debug(this.getClass().getName() + ".createUser() " + message);
+
+                        return null;
+                    }
+                })
+                .thenApplyAsync(rs -> {
+                    try {
+                        if (rs != null) {
                             /** Check to see if userInsert was applied.
                              * userId should be unique, if not, the insert
                              * should fail
                              */
-                            if (!result.wasApplied()) {
-                                Throwable t = new Throwable("User ID already exists");
-                                LOGGER.error("Exception creating user : " + mergeStackTrace(t));
-
-                                eventBus.post(new CassandraMutationError(request, t));
-                                responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
-
-                            } else {
+                            if (rs.getUninterruptibly().wasApplied()) {
                                 LOGGER.debug("User id is unique, creating user");
                                 eventBus.post(UserCreated.newBuilder()
                                         .setUserId(request.getUserId())
@@ -199,22 +185,24 @@ public class UserManagementService extends AbstractUserManagementService {
                                         .build());
                                 responseObserver.onNext(CreateUserResponse.newBuilder().build());
                                 responseObserver.onCompleted();
+
+                            } else {
+                                throw new Throwable("User ID already exists");
                             }
 
                             LOGGER.debug("End creating user");
+                            return CompletableFuture.completedFuture(true);
                         }
 
-                        @Override
-                        public void onFailure(Throwable t) {
-                            LOGGER.error("Exception creating user : " + mergeStackTrace(t));
+                    } catch (Throwable t) {
+                        eventBus.post(new CassandraMutationError(request, t));
+                        responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
+                        LOGGER.error(this.getClass().getName() + ".createUser() " + "Exception creating user : " + mergeStackTrace(t));
 
-                            eventBus.post(new CassandraMutationError(request, t));
-                            responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
-                        }
-                    },
-                    MoreExecutors.sameThreadExecutor()
-            );
-        }
+                        return null;
+                    }
+                    return null;
+                });
     }
 
     @Override

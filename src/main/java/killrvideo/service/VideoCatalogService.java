@@ -228,11 +228,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
 
         // videoId matches the partition key set in the Video class
-        //:TODO getQuery does more than simply generate the query and causes a transaction.  This is not true async and I must replace with async call.
-        //Statement videoQuery = videoMapper.getQuery(videoId);
-
         //:TODO notice that Olivier had me put the videoMapper.getAsync call directly into the callback...don't forget that
-        //:TODO a call to getQuery still produces a prepared statement and that needs to be handled aync otherwise it will block
+        //:TODO a call to getQuery still produces a prepared statement and that needs to be handled async otherwise it will block
         FutureUtils.buildCompletableFuture(videoMapper.getAsync(videoId))
                 .handle((video, ex) -> {
                     if (video != null) {
