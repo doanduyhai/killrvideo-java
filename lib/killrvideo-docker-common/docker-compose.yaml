@@ -22,26 +22,20 @@ services:
     depends_on:
     - etcd
     
-  # DataStax Enterprise
+  # DataStax Enterprise with KillrVideo schema and search config
   dse:
-    image: luketillman/datastax-enterprise:5.0.4
+    image: killrvideo/killrvideo-dse:2.0.0
+    command: [ -g ]
     ports:
     - "9042:9042"
+    - "8983:8983"
+    - "8182:8182"
     cap_add:
     - IPC_LOCK
     ulimits:
       memlock: -1
     environment:
       SERVICE_9042_NAME: cassandra
-  
-  #Web front end
-  web:
-    image: killrvideo/killrvideo-web:1.2.0
-    ports:
-    - "3000:3000"
-    depends_on:
-    - dse
-    - etcd
-    environment:
-      SERVICE_3000_NAME: web
-      KILLRVIDEO_ETCD: "etcd:2379"
+      SERVICE_8983_NAME: dse-search
+      SERVICE_8182_NAME: gremlin
+

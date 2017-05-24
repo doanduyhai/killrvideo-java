@@ -12,13 +12,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
-import com.datastax.driver.core.Cluster;
+import com.datastax.driver.dse.DseCluster;
 import com.datastax.driver.core.Session;
 import com.xqbase.etcd4j.EtcdClient;
 
-import info.archinnov.achilles.generated.ManagerFactory;
-import info.archinnov.achilles.generated.ManagerFactoryBuilder;
-import info.archinnov.achilles.script.ScriptExecutor;
+import com.datastax.driver.mapping.MappingManager;
 import killrvideo.utils.ExceptionUtils;
 
 
@@ -35,13 +33,15 @@ public class CassandraConfiguration {
     @Inject
     EtcdClient etcdClient;
 
-    @Bean(destroyMethod = "shutDown")
-    public ManagerFactory cassandraNativeClusterProduction() {
+    //:TODO Figure out correct shutdown method
+    //@Bean(destroyMethod = "shutDown")
+    @Bean
+    public MappingManager cassandraNativeClusterProduction() {
 
         LOGGER.info("Initializing connection to Cassandra");
+        LOGGER.info("ETCD Client is: " + etcdClient.toString());
 
         try {
-
             List<String> cassandraHostsAndPorts = etcdClient.listDir("/killrvideo/services/cassandra")
                     .stream()
                     .map(node -> node.value)
@@ -57,10 +57,9 @@ public class CassandraConfiguration {
                             .get(0)
                             .split(":")[1]);
 
-
             LOGGER.info(String.format("Retrieving cassandra hosts %s and port %s from etcd", cassandraHosts, cassandraPort));
 
-            Cluster cluster = Cluster.builder()
+            DseCluster cluster = DseCluster.builder()
                     .addContactPoints(cassandraHosts)
                     .withPort(cassandraPort)
                     .withClusterName(CLUSTER_NAME)
@@ -68,18 +67,12 @@ public class CassandraConfiguration {
 
             final Session session = cluster.connect();
 
-            maybeCreateSchema(session);
+            final MappingManager manager = new MappingManager(session);
+            LOGGER.info(String.format("Creating mapping manager %s", manager));
 
-            final ManagerFactory factory = ManagerFactoryBuilder
-                    .builder(cluster)
-                    .withBeanValidation(true)
-                    .withPostLoadBeanValidation(true)
-                    .build();
-
-            return factory;
+            return manager;
 
         } catch (Throwable e) {
-
             LOGGER.error("Exception : " + e.getMessage());
             LOGGER.error(ExceptionUtils.mergeStackTrace(e));
 
@@ -87,10 +80,7 @@ public class CassandraConfiguration {
         }
     }
 
-    private void maybeCreateSchema(Session session) {
-        LOGGER.info("Execute schema creation script 'schema.cql' if necessary");
-        final ScriptExecutor scriptExecutor = new ScriptExecutor(session);
-        scriptExecutor.executeScript("schema.cql");
-
+    public void shutDown() {
+        LOGGER.info("SHUTDOWN called");
     }
 }

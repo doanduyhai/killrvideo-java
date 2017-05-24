@@ -1,20 +1,22 @@
 package killrvideo.entity;
 
 import static killrvideo.entity.Schema.KEYSPACE;
-import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
 import java.util.Date;
 import java.util.UUID;
 
-
 import javax.validation.constraints.NotNull;
 
-import info.archinnov.achilles.annotations.*;
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.ClusteringColumn;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+
 import killrvideo.search.SearchServiceOuterClass.SearchResultsVideoPreview;
 import killrvideo.suggested_videos.SuggestedVideosService.SuggestedVideoPreview;
 import killrvideo.utils.TypeConverter;
 
-@Table(keyspace = KEYSPACE, table = "videos_by_tag")
+@Table(keyspace = KEYSPACE, name = "videos_by_tag")
 public class VideoByTag extends AbstractVideo{
 
     @PartitionKey
@@ -24,7 +26,7 @@ public class VideoByTag extends AbstractVideo{
     private UUID videoid;
 
     @NotNull
-    @Column("added_date")
+    @Column(name = "added_date")
     private Date addedDate;
 
     @NotNull
@@ -32,7 +34,7 @@ public class VideoByTag extends AbstractVideo{
     private UUID userid;
 
     @NotNull
-    @Column("tagged_date")
+    @Column(name = "tagged_date")
     private Date taggedDate;
 
     public VideoByTag() {

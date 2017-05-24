@@ -4,20 +4,17 @@ import java.util.Date;
 import java.util.Optional;
 import java.util.UUID;
 
-import info.archinnov.achilles.annotations.ClusteringColumn;
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+
 import killrvideo.utils.TypeConverter;
-import killrvideo.video_catalog.VideoCatalogServiceOuterClass;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 
-@Table(keyspace = Schema.KEYSPACE, table = "user_videos")
+@Table(keyspace = Schema.KEYSPACE, name = "user_videos")
 public class UserVideos extends AbstractVideoList {
 
     @PartitionKey
     private UUID userid;
-
 
     public UserVideos() {
     }
@@ -41,12 +38,11 @@ public class UserVideos extends AbstractVideoList {
         return userid;
     }
 
-    public void setUserid(UUID userid) {
-        this.userid = userid;
-    }
+    public void setUserid(UUID userid) { this.userid = userid; }
 
     public VideoPreview toVideoPreview() {
-        return VideoPreview.newBuilder()
+        return VideoPreview
+                .newBuilder()
                 .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
                 .setName(name)
                 .setPreviewImageLocation(Optional

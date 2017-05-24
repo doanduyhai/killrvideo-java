@@ -4,24 +4,26 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
+import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.mapping.Mapper;
+import com.datastax.driver.mapping.MappingManager;
+import com.datastax.driver.core.BatchStatement;
+import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.core.Session;
+import killrvideo.entity.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.datastax.driver.core.BatchStatement;
-import com.datastax.driver.core.Session;
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.Subscribe;
 
-import info.archinnov.achilles.generated.manager.TagsByLetter_Manager;
-import info.archinnov.achilles.generated.manager.VideoByTag_Manager;
 import killrvideo.entity.TagsByLetter;
 import killrvideo.entity.VideoByTag;
 import killrvideo.utils.FutureUtils;
-import killrvideo.video_catalog.events.VideoCatalogEvents;
 import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
 
 @Component
@@ -30,14 +32,47 @@ public class VideoAddedHandlers {
     private static Logger LOGGER = LoggerFactory.getLogger(VideoAddedHandlers.class);
 
     @Inject
-    VideoByTag_Manager videoByTagManager;
+    Mapper<VideoByTag> videosByTagMapper;
 
     @Inject
-    TagsByLetter_Manager tagsByLetterManager;
+    Mapper<TagsByLetter> tagsByLetterMapper;
 
     @Inject
-    ExecutorService executorService;
+    MappingManager manager;
 
+    private Session session;
+    private String videosByTagTableName;
+    private String tagsByLetterTableName;
+    private PreparedStatement videosByTagPrepared;
+    private PreparedStatement tagsByLetterPrepared;
+
+    @PostConstruct
+    public void init() {
+        this.session = manager.getSession();
+
+        videosByTagTableName = videosByTagMapper.getTableMetadata().getName();
+        tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
+
+        // Prepared statements for handle()
+        videosByTagPrepared = session.prepare(
+                "INSERT INTO " + Schema.KEYSPACE + "." + videosByTagTableName + " " +
+                        "(tag, videoid, added_date, userid, name, preview_image_location, tagged_date) " +
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)"
+        );
+
+        tagsByLetterPrepared = session.prepare(
+                "INSERT INTO " + Schema.KEYSPACE + "." + tagsByLetterTableName + " " +
+                        "(first_letter, tag) VALUES (?, ?)"
+        );
+    }
+
+    /**
+     * Make @Subscribe subscriber magic happen anytime a youTube video is added from
+     * VideoCatalogService.submitYouTubeVideo() with a call to eventBus.post().
+     * This method inserts any provided tags into multiple tag based tables for use with
+     * searching later using batch functionality.
+     * @param youTubeVideoAdded
+     */
     @Subscribe
     public void handle(YouTubeVideoAdded youTubeVideoAdded) {
 
@@ -53,27 +88,48 @@ public class VideoAddedHandlers {
 
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
 
+        LOGGER.debug("Handler thread " + Thread.currentThread().toString());
+
         tags.forEach(tag -> {
+            BoundStatement videosByTagBound = videosByTagPrepared.bind(
+                    tag, videoId, addedDate, userId, name, previewImageLocation, taggedDate
+            );
 
-            batchStatement.add(videoByTagManager
-                    .crud()
-                    .insert(new VideoByTag(tag, videoId, userId, name, previewImageLocation, addedDate, taggedDate))
-                    .generateAndGetBoundStatement());
+            BoundStatement tagsByLetterBound = tagsByLetterPrepared.bind(
+                    tag.substring(0,1), tag
+            );
 
-            batchStatement.add(tagsByLetterManager
-                    .crud()
-                    .insert(new TagsByLetter(tag.substring(0,1), tag))
-                    .generateAndGetBoundStatement());
+
+            //:TODO Potential implement this with mapper async by using saveQueryAsync and build each statement in the batch with a future and handle
+            /**
+             * Technically, the prepared statements and bound statements with executeAsync()
+             * are just fine and work as expected, however, since these are such simple insert
+             * statements I can use the mapper and entities directly.  I would rather do that from
+             * an illustration standpoint and just need to work it out.
+             */
+//            batchStatement.add(
+//                    videosByTagMapper.saveQuery(
+//                            new VideoByTag(tag, videoId, userId, name, previewImageLocation, addedDate, taggedDate)
+//                    ));
+//
+//            batchStatement.add(
+//                    tagsByLetterMapper.saveQuery(
+//                            new TagsByLetter(tag.substring(0,1), tag)
+//                    ));
+//
+            batchStatement.add(videosByTagBound);
+            batchStatement.add(tagsByLetterBound);
         });
 
         batchStatement.setDefaultTimestamp(taggedDate.getTime());
 
-        FutureUtils.buildCompletableFuture(videoByTagManager.getNativeSession().executeAsync(batchStatement))
+        FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
             .handle((rs, ex) -> {
                 if (rs != null) {
                     LOGGER.debug("End handling YouTubeVideoAdded");
                 }
                 if (ex != null) {
+                    //:TODO We should probably put in some logic that will repeat the transaction if it fails for some reason
 
                 }
                 return rs;

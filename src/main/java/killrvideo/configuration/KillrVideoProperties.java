@@ -56,7 +56,6 @@ public class KillrVideoProperties {
         final Optional<String> serverIp = Optional.ofNullable(System.getenv(KILLRVIDEO_HOST_IP));
 
         if (!dockerIp.isPresent()) {
-
             final String errorMessage = format("Cannot find environment variable %s. " +
                     "Please set it before launching KillrVideoServer", KILLRVIDEO_DOCKER_IP);
             LOGGER.error(errorMessage);
@@ -68,12 +67,12 @@ public class KillrVideoProperties {
         }
 
         if (!serverIp.isPresent()) {
-
             final String errorMessage = format("Cannot find environment variable %s. " +
                     "Please set it before launching KillrVideoServer", KILLRVIDEO_HOST_IP);
 
             LOGGER.error(errorMessage);
             throw new IllegalStateException(errorMessage);
+
         } else {
             LOGGER.info("Setting server ip to : " + serverIp.get());
             this.serverIp = serverIp.get();

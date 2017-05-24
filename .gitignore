@@ -27,3 +27,4 @@ target/*
 .DS_Store
 *.swp
 .java-version
+.env

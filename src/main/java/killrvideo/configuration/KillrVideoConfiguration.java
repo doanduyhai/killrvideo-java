@@ -5,7 +5,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 import javax.validation.Validation;
 import javax.validation.Validator;
@@ -16,7 +15,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
-import com.google.common.base.Optional;
 import com.google.common.eventbus.EventBus;
 
 import killrvideo.async.KillrVideoThreadFactory;
@@ -25,6 +23,7 @@ import killrvideo.async.KillrVideoThreadFactory;
 public class KillrVideoConfiguration {
 
     private static Logger LOGGER = LoggerFactory.getLogger(KillrVideoConfiguration.class);
+
     @Inject
     private Environment env;
 
