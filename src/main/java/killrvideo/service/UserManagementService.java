@@ -216,29 +216,28 @@ public class UserManagementService extends AbstractUserManagementService {
 
         /**
          * Since email is the partitionKey for the UserCredentials
-         * entity I can simply pass it to the mapper get() method
+         * entity I can simply pass it to the mapper getAsync() method
          * to get my result
          */
-        //:TODO Potentially update to make an async call
-        final UserCredentials one = userCredentialsMapper
-                .get(request.getEmail());
+        FutureUtils.buildCompletableFuture(userCredentialsMapper.getAsync(request.getEmail()))
+                .handle((credential, ex) -> {
+                    if (credential == null || !HashUtils.isPasswordValid(request.getPassword(), credential.getPassword())) {
+                        final String errorMessage = "Email address or password are not correct.";
 
-        if (one == null || !HashUtils.isPasswordValid(request.getPassword(), one.getPassword())) {
-            final String errorMessage = "Email address or password are not correct.";
+                        LOGGER.error(errorMessage);
+                        responseObserver.onError(Status.INVALID_ARGUMENT.withDescription(errorMessage).asRuntimeException());
 
-            LOGGER.error(errorMessage);
-            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription(errorMessage).asRuntimeException());
+                    } else {
+                        responseObserver.onNext(VerifyCredentialsResponse
+                                .newBuilder()
+                                .setUserId(TypeConverter.uuidToUuid(credential.getUserid()))
+                                .build());
+                        responseObserver.onCompleted();
 
-        } else {
-            responseObserver.onNext(VerifyCredentialsResponse
-                    .newBuilder()
-                    .setUserId(TypeConverter.uuidToUuid(one.getUserid()))
-                    .build());
-            responseObserver.onCompleted();
-
-            LOGGER.debug("End verifying user credentials");
-        }
-
+                        LOGGER.debug("End verifying user credentials");
+                    }
+                    return credential;
+                });
     }
 
     @Override
