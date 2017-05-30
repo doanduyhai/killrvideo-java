@@ -56,6 +56,13 @@ import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
 @Service
 public class VideoCatalogService extends AbstractVideoCatalogService {
 
+    // used as a container for custom paging state for latest videos
+    class CustomPagingState {
+        public List<String> buckets;
+        public int currentBucket;
+        public String cassandraPagingState;
+    }
+
     private static final Logger LOGGER = LoggerFactory.getLogger(VideoCatalogService.class);
 
     public static final int MAX_DAYS_IN_PAST_FOR_LATEST_VIDEOS = 7;
@@ -358,18 +365,13 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
             return;
         }
 
-        /**
-         * TupleValue here contains a tuple with 3 elements (List<String>, Integer, String)
-         */
-        //:TODO This is not a good use of a tuple and we are not storing it in the DB
-        //:TODO Switch this out with something more traditional
-        final TupleValue tuple3 = parseCustomPagingState(Optional.ofNullable(request.getPagingState()))
-                .orElseGet(this.buildFirstCustomPagingState());
+        final CustomPagingState customPagingState = parseCustomPagingState(Optional.ofNullable(request.getPagingState()))
+                .orElse(this.buildFirstCustomPagingState());
 
-        final List<String> buckets = tuple3.getList(0, new TypeToken<String>() {});
-        int bucketIndex = tuple3.getInt(1);
-        final String rowPagingState = tuple3.getString(2);
-        LOGGER.debug("Tuple is: buckets: " + buckets.size() + " index: " + bucketIndex + " state: " + rowPagingState);
+        final List<String> buckets = customPagingState.buckets;
+        int bucketIndex = customPagingState.currentBucket;
+        final String rowPagingState = customPagingState.cassandraPagingState;
+        LOGGER.debug("Custom paging state is: buckets: " + buckets.size() + " index: " + bucketIndex + " state: " + rowPagingState);
 
         final Optional<Date> startingAddedDate = Optional
                 .ofNullable(request.getStartingAddedDate())
@@ -398,7 +400,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 int recordsStillNeeded = request.getPageSize() - results.size();
                 final String yyyyMMdd = buckets.get(bucketIndex);
 
-                final Optional<String> pagingStateString =
+                final Optional<String> pagingState =
                         Optional.ofNullable(rowPagingState)
                                 .filter(StringUtils::isNotBlank)
                                 .filter(pg -> !cassandraPagingStateUsed.get());
@@ -438,11 +440,11 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
                 }
 
-                //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
-                if (pagingStateString.isPresent()) {
-                    bound.setPagingState(PagingState.fromString(pagingStateString.get()));
-                    cassandraPagingStateUsed.compareAndSet(false, true);
-                }
+                pagingState.ifPresent( x -> {
+                            bound.setPagingState(PagingState.fromString(x));
+                            cassandraPagingStateUsed.compareAndSet(false, true);
+                        }
+                );
 
                 /**
                  * Not entirely sure why DuyHai used getUninterruptibly within his
@@ -461,12 +463,12 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
                 // See if we can stop querying
                 if (results.size() >= request.getPageSize()) {
-                    final PagingState pagingState = executionInfo.getPagingState();
+                    final PagingState cassandraPagingState = executionInfo.getPagingState();
 
                     // Are there more rows in the current bucket?
-                    if (pagingState != null) {
+                    if (cassandraPagingState != null) {
                         // Start from where we left off in this bucket if we get the next page
-                        nextPageState = createPagingState(buckets, bucketIndex, pagingState.toString());
+                        nextPageState = createPagingState(buckets, bucketIndex, cassandraPagingState.toString());
 
                     } else if (bucketIndex != buckets.size() - 1) {
                         // Start from the beginning of the next bucket since we're out of rows in this one
@@ -521,7 +523,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 .map(ts -> Instant.ofEpochSecond(ts.getSeconds(), ts.getNanos()))
                 .map(Date::from);
 
-        final Optional<String> pagingStateString = Optional.ofNullable(request.getPagingState()).filter(StringUtils::isNotBlank);
+        final Optional<String> pagingState = Optional.ofNullable(request.getPagingState()).filter(StringUtils::isNotBlank);
         BoundStatement bound;
 
         /**
@@ -557,10 +559,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
             LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
         }
 
-        //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
-        if (pagingStateString.isPresent()) {
-            bound.setPagingState(PagingState.fromString(pagingStateString.get()));
-        }
+        pagingState.ifPresent( x -> bound.setPagingState(PagingState.fromString(x)));
 
         /**
          * Notice since I am passing userVideosMapper.mapAsync() into my call
@@ -624,24 +623,21 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
 
     /**
-     * Parse the passed in paging state and return a
-     * TupleValue that essentially acts as a
-     * tuple with 3 elements (List<String>, Integer, String) as Optional.
-     * @param customPagingState
+     * Parse the passed in paging state and return an object containing the 3 elements of the state
+     * (List<String>, Integer, String) as Optional.
+     * @param customPagingStateString
      * @return Optional
      */
-    //:TODO Replace tuple with something more traditional, this is not a good use
-    private Optional<TupleValue> parseCustomPagingState(Optional<String> customPagingState) {
-        return customPagingState
+    private Optional<CustomPagingState> parseCustomPagingState(Optional<String> customPagingStateString) {
+        return customPagingStateString
                 .map(pagingState -> {
                     Matcher matcher = PARSE_LATEST_PAGING_STATE.matcher(pagingState);
                     if (matcher.matches()) {
-                        final List<String> buckets = Lists.newArrayList(matcher.group(1).split("_"));
-                        final int currentBucket = Integer.parseInt(matcher.group(2));
-                        final String cassandraPagingState = matcher.group(3);
-                        TupleType tuple3 = session.getCluster().getMetadata()
-                                .newTupleType(DataType.list(DataType.text()), DataType.cint(), DataType.text());
-                        return tuple3.newValue(buckets, currentBucket, cassandraPagingState);
+                        final CustomPagingState customPagingState = new CustomPagingState();
+                        customPagingState.buckets = Lists.newArrayList(matcher.group(1).split("_"));
+                        customPagingState.currentBucket = Integer.parseInt(matcher.group(2));
+                        customPagingState.cassandraPagingState = matcher.group(3);
+                        return customPagingState;
                     } else {
                         return null;
                     }
@@ -650,24 +646,22 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
 
     /**
-     * Build the first paging state if one does not already exist
-     * and return a TupleValue that essentially acts as a
-     * tuple with 3 elements (List<String>, Integer, String) as Supplier.
-     * @return TupleValue
+     * Build the first paging state if one does not already exist and return an object containing 3 elements
+     * representing the initial state (List<String>, Integer, String).
+     * @return CustomPagingState
      */
-    //:TODO a tuple may not be the best way to do this as we are not using it as intended.  Take a look at Patrick's modified
-    //:TODO killrvideo schema for tuple/UDT examples
-    private Supplier<TupleValue> buildFirstCustomPagingState() {
-        return () -> {
+    private CustomPagingState buildFirstCustomPagingState() {
+        //return () -> {
+            final CustomPagingState customPagingState = new CustomPagingState();
             final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
             final ZonedDateTime now = Instant.now().atZone(ZoneId.systemDefault());
-            final List<String> buckets = LongStream.rangeClosed(0L, 7L).boxed()
+            customPagingState.buckets = LongStream.rangeClosed(0L, 7L).boxed()
                     .map(now::minusDays)
                     .map(x -> x.format(formatter))
                     .collect(Collectors.toList());
-            TupleType tuple3 = session.getCluster().getMetadata()
-                    .newTupleType(DataType.list(DataType.text()), DataType.cint(), DataType.text());
-            return tuple3.newValue(buckets, 0, null);
-        };
+            customPagingState.currentBucket = 0;
+            customPagingState.cassandraPagingState = null;
+            return customPagingState;
+        //};
     }
 }
