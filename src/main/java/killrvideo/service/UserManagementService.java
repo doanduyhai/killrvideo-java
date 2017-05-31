@@ -6,7 +6,6 @@ import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
@@ -128,7 +127,17 @@ public class UserManagementService extends AbstractUserManagementService {
                 .setString("password", hashedPassword)
                 .setUUID("userid", userId);
 
+        /**
+         * Note that we have multiple executeAsync() calls in the following chain.
+         * We check our user_credentials first, if that passes, we move onto inserting
+         * the user into the users table.  Both cases use lightweight transactions
+         * to ensure we are not duplicating already existing users within the database.
+         */
         FutureUtils.buildCompletableFuture(session.executeAsync(checkEmailQuery))
+                /**
+                 * the "Async" portion of this method call will apply it
+                 * asynchronously in a different thread pool
+                 */
                 .handleAsync((rs, ex) -> {
                     try {
                         if (rs != null) {
@@ -143,6 +152,9 @@ public class UserManagementService extends AbstractUserManagementService {
                             if (rs.wasApplied()) {
                                 /**
                                  * No LWT error, we can proceed further
+                                 * Execute our insert statement in an async
+                                 * fashion as well and pass the result to the next
+                                 * line in the chain
                                  */
                                 final BoundStatement insertUser = createUser_insertUserPrepared.bind()
                                         .setUUID("userid", userId)
@@ -151,13 +163,14 @@ public class UserManagementService extends AbstractUserManagementService {
                                         .setString("email", email)
                                         .setTimestamp("created_date", now);
 
-                                return session.executeAsync(insertUser);
+                                return FutureUtils.buildCompletableFuture(session.executeAsync(insertUser));
 
-                            } else {
+                            } else { // throw in case our LWT fails
                                 throw new Throwable(exceptionMessage);
                             }
+                        } else { // throw in case our result set is null
+                            throw new Throwable(ex);
                         }
-                        return null;
 
                     } catch (Throwable t) {
                         final String message = t.getMessage();
@@ -167,14 +180,17 @@ public class UserManagementService extends AbstractUserManagementService {
                         return null;
                     }
                 })
-                .thenApplyAsync(rs -> {
+                /**
+                 * thenAccept in the same thread pool
+                 */
+                .thenAccept(rs -> {
                     try {
                         if (rs != null) {
                             /** Check to see if userInsert was applied.
                              * userId should be unique, if not, the insert
                              * should fail
                              */
-                            if (rs.getUninterruptibly().wasApplied()) {
+                            if (rs.get().wasApplied()) {
                                 LOGGER.debug("User id is unique, creating user");
                                 eventBus.post(UserCreated.newBuilder()
                                         .setUserId(request.getUserId())
@@ -191,17 +207,13 @@ public class UserManagementService extends AbstractUserManagementService {
                             }
 
                             LOGGER.debug("End creating user");
-                            return CompletableFuture.completedFuture(true);
                         }
 
                     } catch (Throwable t) {
                         eventBus.post(new CassandraMutationError(request, t));
                         responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
                         LOGGER.error(this.getClass().getName() + ".createUser() " + "Exception creating user : " + mergeStackTrace(t));
-
-                        return null;
                     }
-                    return null;
                 });
     }
 

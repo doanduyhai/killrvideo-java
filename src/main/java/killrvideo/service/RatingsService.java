@@ -95,32 +95,26 @@ public class RatingsService extends AbstractRatingsService {
                 .setUUID("videoid", videoId);
 
         /**
-         * Insert the rating into video_ratings_by_user
-         */
-        //:TODO Potential to make this a prepared statement
-        //:TODO This is not async??, use saveAsync instead
-        /**
-         * Per http://docs.datastax.com/en/drivers/java-dse/1.2/ saveAsync
-         * it says the following "public ListenableFuture<Void> saveAsync(T entity)
-         * Saves an entity mapped by this mapper asynchronously.
-         * This method is basically equivalent to: getManager().getSession().executeAsync(saveQuery(entity))."
-         * This is effectively what I have below, but in talking with Olivier I thought the
-         * response was using saveQuery is blocking.  I may be misunderstanding, need clarification on this.
-         */
-        Statement ratingInsertQuery = videoRatingByUserMapper
-                .saveQuery(new VideoRatingByUser(videoId, userId, rating));
-
-        /**
          * Here, instead of using logged batch, we can insert both mutations asynchronously
          * In case of error, we log the request into the mutation error log for replay later
          * by another micro-service
+         *
+         * Something else to notice is I am using both a prepared statement with executeAsync()
+         * and a call to the mapper's saveAsync() methods.  I could have kept things uniform
+         * and stuck with both prepared/bind statements, but I wanted to illustrate the combination
+         * and use the mapper for the second statement because it is a simple save operation with no
+         * options, increments, etc...  A key point is in the case you see below both statements are actually
+         * prepared, the first one I did manually in a more traditional sense and in the second one the
+         * mapper will prepare the statement for you automagically.
          */
         CompletableFuture
                 .allOf(
                         FutureUtils.buildCompletableFuture(session.executeAsync(counterUpdateStatement)),
-                        FutureUtils.buildCompletableFuture(session.executeAsync(ratingInsertQuery))
+                        FutureUtils.buildCompletableFuture(videoRatingByUserMapper
+                                .saveAsync(new VideoRatingByUser(videoId, userId, rating)))
                 )
-                .handle((rs, ex) -> {
+                .handleAsync((rs, ex) -> {
+                    LOGGER.debug("Handler thread " + Thread.currentThread().toString());
                     if (ex == null) {
                         eventBus.post(UserRatedVideo.newBuilder()
                                 .setVideoId(request.getVideoId())
@@ -156,7 +150,7 @@ public class RatingsService extends AbstractRatingsService {
 
         // videoId matches the partition key set in the VideoRating class
         FutureUtils.buildCompletableFuture(videoRatingMapper.getAsync(videoId))
-                .handle((ratings, ex) -> {
+                .handleAsync((ratings, ex) -> {
                     if (ex != null) {
                         LOGGER.error("Exception when getting video rating : " + mergeStackTrace(ex));
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
@@ -197,7 +191,7 @@ public class RatingsService extends AbstractRatingsService {
         final UUID userId = UUID.fromString(request.getUserId().getValue());
 
         FutureUtils.buildCompletableFuture(videoRatingByUserMapper.getAsync(videoId, userId))
-                .handle((videoRating, ex) -> {
+                .handleAsync((videoRating, ex) -> {
                     if (ex != null) {
                         LOGGER.error("Exception when getting user rating : " + mergeStackTrace(ex));
 
