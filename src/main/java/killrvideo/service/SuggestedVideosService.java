@@ -46,7 +46,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
     @Inject
     KillrVideoInputValidator validator;
 
-    Session session;
+    private Session session;
     private String videoByTagTableName;
     private PreparedStatement getRelatedVideos_getVideosByTagPrepared;
 
