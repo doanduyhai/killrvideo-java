@@ -232,7 +232,7 @@ public class CommentService extends AbstractCommentsService {
 
         final TimeUuid startingCommentId = request.getStartingCommentId();
         final Uuid userId = request.getUserId();
-        final Optional<String> pagingStateString = Optional
+        final Optional<String> pagingState = Optional
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
 
@@ -262,10 +262,7 @@ public class CommentService extends AbstractCommentsService {
 
         statement.setFetchSize(request.getPageSize());
 
-        //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
-        if (pagingStateString.isPresent()) {
-            statement.setPagingState(PagingState.fromString(pagingStateString.get()));
-        }
+        pagingState.ifPresent( x -> statement.setPagingState(PagingState.fromString(x)));
 
         FutureUtils.buildCompletableFuture(session.executeAsync(statement))
                 .handle((commentResult, ex) -> {
@@ -322,7 +319,7 @@ public class CommentService extends AbstractCommentsService {
 
         final TimeUuid startingCommentId = request.getStartingCommentId();
         final Uuid videoId = request.getVideoId();
-        final Optional<String> pagingStateString = Optional
+        final Optional<String> pagingState = Optional
                 .ofNullable(request.getPagingState())
                 .filter(StringUtils::isNotBlank);
 
@@ -352,10 +349,7 @@ public class CommentService extends AbstractCommentsService {
 
         statement.setFetchSize(request.getPageSize());
 
-        //:TODO Figure out a more streamlined way to do this with Optional and java 8 lambda
-        if (pagingStateString.isPresent()) {
-            statement.setPagingState(PagingState.fromString(pagingStateString.get()));
-        }
+        pagingState.ifPresent( x -> statement.setPagingState(PagingState.fromString(x)));
 
         FutureUtils.buildCompletableFuture(session.executeAsync(statement))
                 .handle((commentResult, ex) -> {

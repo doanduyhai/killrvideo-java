@@ -97,10 +97,7 @@ public class SearchService extends AbstractSearchService {
 
         statement.setFetchSize(request.getPageSize());
 
-        //:TODO Figure out more streamlined way to do this with Optional and java 8 lambda
-        if (pagingState.isPresent()) {
-            statement.setPagingState(PagingState.fromString(pagingState.get()));
-        }
+        pagingState.ifPresent( x -> statement.setPagingState(PagingState.fromString(x)));
 
         FutureUtils.buildCompletableFuture(videosByTagMapper.mapAsync(session.executeAsync(statement)))
                 .handle((videos, ex) -> {
