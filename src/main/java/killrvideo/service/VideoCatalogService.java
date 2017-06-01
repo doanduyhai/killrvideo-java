@@ -27,6 +27,7 @@ import com.datastax.driver.core.Statement;
 import com.datastax.driver.mapping.Result;
 import com.google.common.reflect.TypeToken;
 import killrvideo.entity.*;
+import killrvideo.statistics.StatisticsServiceOuterClass;
 import killrvideo.utils.FutureUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -375,7 +376,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         final Optional<Date> startingAddedDate = Optional
                 .ofNullable(request.getStartingAddedDate())
-                //.filter(x -> StringUtils.isNotBlank(x.toString())) //:TODO ensure if this should be included or not
+                .filter(x -> StringUtils.isNotBlank(x.toString())) //:TODO ensure if this should be included or not
                 .map(x -> Instant.ofEpochSecond(x.getSeconds(), x.getNanos()))
                 .map(Date::from);
 
@@ -398,6 +399,8 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         try {
             while (bucketIndex < buckets.size()) {
                 int recordsStillNeeded = request.getPageSize() - results.size();
+                LOGGER.debug("recordsStillNeeded is: " + recordsStillNeeded + " pageSize is: " + request.getPageSize() + " results.size is: " + results.size());
+
                 final String yyyyMMdd = buckets.get(bucketIndex);
 
                 final Optional<String> pagingState =
@@ -421,9 +424,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                             .setTimestamp("ad", startingAddedDate.get())
                             .setUUID("vid", startingVideoId.get());
 
-                    bound
-                            .setFetchSize(recordsStillNeeded);
-
                     LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
 
                 } else {
@@ -434,13 +434,13 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     bound = latestVideoPreview_noStartingPointPrepared.bind()
                             .setString("ymd", yyyyMMdd);
 
-                    bound
-                            .setFetchSize(recordsStillNeeded);
-
                     LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
                 }
 
-                pagingState.ifPresent( x -> {
+                bound.setFetchSize(recordsStillNeeded);
+                LOGGER.debug("FETCH SIZE is: " + bound.getFetchSize() + " ymd is: " + yyyyMMdd);
+
+                pagingState.ifPresent(x -> {
                             bound.setPagingState(PagingState.fromString(x));
                             cassandraPagingStateUsed.compareAndSet(false, true);
                         }
@@ -453,34 +453,36 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                  */
                 //:TODO Find a way to do this properly in an async fashion, in talking to Olivier
                 //:TODO there is a way to do it, but it is more complicated.  ControlConnection
-                Result<LatestVideos> videos = latestVideosMapper.map(session.executeAsync(bound).getUninterruptibly());
+                ResultSet resultSet = session.executeAsync(bound).getUninterruptibly();
+                Result<LatestVideos> videos = latestVideosMapper.map(resultSet);
                 results.addAll(videos.all()
                         .stream()
                         .map(LatestVideos::toVideoPreview)
                         .collect(toList()));
 
-                final ExecutionInfo executionInfo = videos.getExecutionInfo();
 
                 // See if we can stop querying
                 if (results.size() >= request.getPageSize()) {
-                    final PagingState cassandraPagingState = executionInfo.getPagingState();
+                    final PagingState cassandraPagingState = resultSet.getAllExecutionInfo().get(0).getPagingState();
 
-                    // Are there more rows in the current bucket?
                     if (cassandraPagingState != null) {
+                        LOGGER.debug("results.size() >= request.getPageSize()");
                         // Start from where we left off in this bucket if we get the next page
                         nextPageState = createPagingState(buckets, bucketIndex, cassandraPagingState.toString());
 
-                    } else if (bucketIndex != buckets.size() - 1) {
-                        // Start from the beginning of the next bucket since we're out of rows in this one
-                        nextPageState = createPagingState(buckets, bucketIndex + 1, "");
+                        break;
                     }
-                    break;
+
+                } else if (bucketIndex == buckets.size() - 1) {
+                    LOGGER.debug("bucketIndex == buckets.size() - 1)");
+                    // Start from the beginning of the next bucket since we're out of rows in this one
+                    nextPageState = createPagingState(buckets, bucketIndex + 1, "");
                 }
 
                 LOGGER.debug("------------------" +
                         " buckets: " + buckets.size() +
                         " index: " + bucketIndex +
-                        " state: " + rowPagingState +
+                        " state: " + nextPageState +
                         " results size: " + results.size() +
                         " request pageSize: " + request.getPageSize()
                 );

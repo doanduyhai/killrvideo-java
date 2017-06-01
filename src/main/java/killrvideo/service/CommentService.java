@@ -89,13 +89,13 @@ public class CommentService extends AbstractCommentsService {
 
         // Prepared statements for commentOnVideo()
         commentsByUserPrepared = session.prepare(
-                "INSERT INTO " + Schema.KEYSPACE + ".comments_by_user " +
+                "INSERT INTO " + Schema.KEYSPACE + "." + commentsByUserTableName + " " +
                         "(userid, commentid, comment, videoid) " +
                         "VALUES (?, ?, ?, ?)"
         );
 
         commentsByVideoPrepared = session.prepare(
-                "INSERT INTO " + Schema.KEYSPACE + ".comments_by_video " +
+                "INSERT INTO " + Schema.KEYSPACE + "." + commentsByVideoTableName + " " +
                         "(videoid, commentid, comment, userid) " +
                         "VALUES (?, ?, ?, ?)"
         );
@@ -109,7 +109,7 @@ public class CommentService extends AbstractCommentsService {
          * @Computed is only supported when using the mapper stated per
          * http://docs.datastax.com/en/drivers/java/3.2/com/datastax/driver/mapping/annotations/Computed.html.
          * So, I essentially have 2 ways to get the timestamp out of my timeUUID column
-         * depending on the type of query I am performing.
+         * depending on the type of query I am executing.
          */
         getUserComments_noStartingPointPrepared = session.prepare(
                 QueryBuilder
