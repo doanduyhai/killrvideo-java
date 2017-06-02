@@ -12,7 +12,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -25,9 +24,7 @@ import javax.inject.Inject;
 import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.Statement;
 import com.datastax.driver.mapping.Result;
-import com.google.common.reflect.TypeToken;
 import killrvideo.entity.*;
-import killrvideo.statistics.StatisticsServiceOuterClass;
 import killrvideo.utils.FutureUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -236,8 +233,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
 
         // videoId matches the partition key set in the Video class
-        //:TODO notice that Olivier had me put the videoMapper.getAsync call directly into the callback...don't forget that
-        //:TODO a call to getQuery still produces a prepared statement and that needs to be handled async otherwise it will block
         FutureUtils.buildCompletableFuture(videoMapper.getAsync(videoId))
                 .handle((video, ex) -> {
                     if (video != null) {
@@ -376,7 +371,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         final Optional<Date> startingAddedDate = Optional
                 .ofNullable(request.getStartingAddedDate())
-                .filter(x -> StringUtils.isNotBlank(x.toString())) //:TODO ensure if this should be included or not
+                .filter(x -> StringUtils.isNotBlank(x.toString()))
                 .map(x -> Instant.ofEpochSecond(x.getSeconds(), x.getNanos()))
                 .map(Date::from);
 
@@ -399,7 +394,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         try {
             while (bucketIndex < buckets.size()) {
                 int recordsStillNeeded = request.getPageSize() - results.size();
-                LOGGER.debug("recordsStillNeeded is: " + recordsStillNeeded + " pageSize is: " + request.getPageSize() + " results.size is: " + results.size());
+                LOGGER.debug("\nrecordsStillNeeded is: " + recordsStillNeeded + " pageSize is: " + request.getPageSize() + " results.size is: " + results.size());
 
                 final String yyyyMMdd = buckets.get(bucketIndex);
 
@@ -410,10 +405,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
                 BoundStatement bound;
 
-                /**
-                 * If startingAddedDate and startingVideoId are provided,
-                 * we do NOT use the paging state
-                 */
                 if (startingAddedDate.isPresent() && startingVideoId.isPresent()) {
                     /**
                      * The startingPointPrepared statement can be found at the top
@@ -446,41 +437,60 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         }
                 );
 
-                /**
-                 * Not entirely sure why DuyHai used getUninterruptibly within his
-                 * getListWithStats() call from Achilles, but I copied it to ensure
-                 * I replicated the same functionality.  Must get clarification on this.
-                 */
-                //:TODO Find a way to do this properly in an async fashion, in talking to Olivier
-                //:TODO there is a way to do it, but it is more complicated.  ControlConnection
-                ResultSet resultSet = session.executeAsync(bound).getUninterruptibly();
-                Result<LatestVideos> videos = latestVideosMapper.map(resultSet);
-                results.addAll(videos.all()
-                        .stream()
-                        .map(LatestVideos::toVideoPreview)
-                        .collect(toList()));
+                final CompletableFuture<Result<LatestVideos>> videosFuture = FutureUtils
+                        .buildCompletableFuture(latestVideosMapper.mapAsync(session.executeAsync(bound)))
+                        .handleAsync((latestVideos, ex) -> { //:TODO Determine if we want to use Async version or not
+                            if (latestVideos != null) {
+                                /**
+                                 * For those of you wondering where the call to fetchMoreResults()
+                                 * is take a look here for an explanation
+                                 * https://docs.datastax.com/en/drivers/java/3.2/com/datastax/driver/core/PagingIterable.html#getAvailableWithoutFetching--
+                                 * Quick summary, when getAvailableWithoutFetching() == 0 it automatically calls fetchMoreResults()
+                                 * We could use it to force a fetch in a "prefetch" scenario, but that
+                                 * is not what we are doing here.
+                                 */
+                                int remaining = latestVideos.getAvailableWithoutFetching();
+                                for (LatestVideos latestVideo : latestVideos) {
+                                    LOGGER.debug("latest video is: " + latestVideo.getName());
+                                    // Add each row to results
+                                    results.add(latestVideo.toVideoPreview());
 
+                                    if (--remaining == 0) {
+                                        break;
+                                    }
+                                }
+
+                            } else if (ex != null) {
+                                LOGGER.error("Exception getting latest video preview : " + mergeStackTrace(ex));
+                                responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
+
+                            }
+                            return latestVideos;
+                        });
+
+                final Result<LatestVideos> videos = videosFuture.get();
 
                 // See if we can stop querying
-                if (results.size() >= request.getPageSize()) {
-                    final PagingState cassandraPagingState = resultSet.getAllExecutionInfo().get(0).getPagingState();
+                LOGGER.debug("results.size() is: " + results.size() + " request.getPageSize() is : " + request.getPageSize());
+                if (results.size() == request.getPageSize()) {
+                    final PagingState cassandraPagingState = videos.getAllExecutionInfo().get(0).getPagingState();
 
                     if (cassandraPagingState != null) {
-                        LOGGER.debug("results.size() >= request.getPageSize()");
+                        LOGGER.debug("results.size() == request.getPageSize()");
                         // Start from where we left off in this bucket if we get the next page
                         nextPageState = createPagingState(buckets, bucketIndex, cassandraPagingState.toString());
 
                         break;
                     }
 
+                // Start from the beginning of the next bucket since we're out of rows in this one
                 } else if (bucketIndex == buckets.size() - 1) {
                     LOGGER.debug("bucketIndex == buckets.size() - 1)");
-                    // Start from the beginning of the next bucket since we're out of rows in this one
                     nextPageState = createPagingState(buckets, bucketIndex + 1, "");
                 }
 
-                LOGGER.debug("------------------" +
-                        " buckets: " + buckets.size() +
+                LOGGER.debug("" +
+                        "buckets: " + buckets.size() +
                         " index: " + bucketIndex +
                         " state: " + nextPageState +
                         " results size: " + results.size() +
@@ -497,7 +507,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
         } catch (Throwable throwable) {
             LOGGER.error("Exception when getting latest preview videos : " + mergeStackTrace(throwable));
-
             responseObserver.onError(Status.INTERNAL.withCause(throwable).asRuntimeException());
         }
         LOGGER.debug("End getting latest video preview");
@@ -542,9 +551,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     .setTimestamp("ad", startingAddedDate.get())
                     .setUUID("vid", startingVideoId.get());
 
-            bound
-                    .setFetchSize(request.getPageSize());
-
             LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
 
         } else {
@@ -555,12 +561,10 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
             bound = userVideoPreview_noStartingPointPrepared.bind()
                     .setUUID("uid", userId);
 
-            bound
-                    .setFetchSize(request.getPageSize());
-
             LOGGER.debug("Current query is: " + bound.preparedStatement().getQueryString());
         }
 
+        bound.setFetchSize(request.getPageSize());
         pagingState.ifPresent( x -> bound.setPagingState(PagingState.fromString(x)));
 
         /**
@@ -653,7 +657,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
      * @return CustomPagingState
      */
     private CustomPagingState buildFirstCustomPagingState() {
-        //return () -> {
             final CustomPagingState customPagingState = new CustomPagingState();
             final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
             final ZonedDateTime now = Instant.now().atZone(ZoneId.systemDefault());
@@ -664,6 +667,5 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
             customPagingState.currentBucket = 0;
             customPagingState.cassandraPagingState = null;
             return customPagingState;
-        //};
     }
 }
