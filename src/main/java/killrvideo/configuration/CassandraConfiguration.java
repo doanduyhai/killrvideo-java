@@ -33,8 +33,6 @@ public class CassandraConfiguration {
     @Inject
     EtcdClient etcdClient;
 
-    //:TODO Figure out correct shutdown method
-    //@Bean(destroyMethod = "shutDown")
     @Bean
     public MappingManager cassandraNativeClusterProduction() {
 
@@ -78,9 +76,5 @@ public class CassandraConfiguration {
 
             throw new IllegalStateException("Cannot find 'killrvideo/services/cassandra' from etcd");
         }
-    }
-
-    public void shutDown() {
-        LOGGER.info("SHUTDOWN called");
     }
 }
