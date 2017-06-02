@@ -133,7 +133,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                                         try {
                                             LOGGER.debug("Handler thread " + Thread.currentThread().toString());
 
-                                            //TODO: Potentially move away from get() and move to async results
+                                            //TODO: Potentially move away from using get()
                                             results.putAll(videos.get().all()
                                                     .stream()
                                                     .map(VideoByTag::toSuggestedVideoPreview)

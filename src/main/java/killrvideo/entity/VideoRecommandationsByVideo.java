@@ -17,20 +17,15 @@ public class VideoRecommandationsByVideo {
     private UUID videoid;
 
     @Column(name = "added_date")
-    //:TODO Figure out if Static annotation supported by DSE driver
-    //@Static
     private Date addedDate;
 
     @Column
-    //@Static
     private UUID authorid;
 
     @Column
-    //@Static
     private String name;
 
     @Column(name = "preview_image_location")
-    //@Static
     private String previewImageLocation;
 
     @ClusteringColumn
