@@ -100,7 +100,7 @@ public class VideoAddedHandlers {
             );
 
 
-            //:TODO Potential implement this with mapper async by using saveQueryAsync and build each statement in the batch with a future and handle
+            //:TODO Potential implement this with mapper async by using saveAsync and build each statement in the batch with a future and handle
             /**
              * Technically, the prepared statements and bound statements with executeAsync()
              * are just fine and work as expected, however, since these are such simple insert
