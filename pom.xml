@@ -13,7 +13,6 @@
         <grpc.version>1.0.0</grpc.version>
         <achilles.version>5.1.5</achilles.version>
         <dse.version>1.2.3</dse.version>
-        <!-- <cassandra.version>3.2.0</cassandra.version> -->
         <guava.version>18.0</guava.version>
         <commons.lang3.version>3.3.2</commons.lang3.version>
         <commons-codec.version>1.10</commons-codec.version>
@@ -25,13 +24,10 @@
         <validation.api.version>1.1.0.Final</validation.api.version>
         <javax.el.api.version>2.2.4</javax.el.api.version>
         <validator.version>5.2.2.Final</validator.version>
-        <!-- <netty.version>4.1.3.Final</netty.version> -->
         <etcd4j.version>1.2</etcd4j.version>
-
         <mockito.version>1.9.5</mockito.version>
         <assertj-core.version>1.7.0</assertj-core.version>
         <junit.version>4.10</junit.version>
-
     </properties>
 
     <dependencies>
@@ -40,10 +36,6 @@
             <artifactId>achilles-core</artifactId>
             <version>${achilles.version}</version>
             <exclusions>
-                <!-- <exclusion>
-                    <groupId>io.netty</groupId>
-                    <artifactId>netty-handler</artifactId>
-                </exclusion> -->
                 <exclusion>
                     <groupId>com.datastax.cassandra</groupId>
                     <artifactId>cassandra-driver-core</artifactId>
@@ -55,21 +47,7 @@
             </exclusions>
         </dependency>
 
-        <!-- Even though the point here is to go "pure"
-        java, Achilles has some really useful utilities
-        that I am not ready to tackle just yet so I am including
-        pieces and parts to handle those until a later time. -->
-        <!-- <dependency>
-            <groupId>info.archinnov</groupId>
-            <artifactId>achilles-common</artifactId>
-            <version>${achilles.version}</version>
-        </dependency> -->
-
         <!-- Java driver for DSE -->
-        <!-- Note: I copied the netty-handler exclusion from what
-        DuyHai did with Achilles to resolve issues I was having
-        with the Netty Handler.  Not sure why this works, didn't
-        really look into it, but it does.  -->
         <dependency>
             <groupId>com.datastax.dse</groupId>
             <artifactId>dse-java-driver-core</artifactId>
@@ -91,33 +69,6 @@
             <artifactId>dse-java-driver-extras</artifactId>
             <version>${dse.version}</version>
         </dependency>
-
-        <!-- Include the object mapper from the provided Cassandra
-        driver seen here -> http://docs.datastax.com/en/developer/java-driver/3.1/manual/object_mapper
-        This should help replace some of the lost boiler plate
-        capabilities we had from Achilles -->
-        <!-- <dependency>
-            <groupId>com.datastax.cassandra</groupId>
-            <artifactId>cassandra-driver-core</artifactId>
-            <version>${cassandra.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.netty</groupId>
-                    <artifactId>netty-handler</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.datastax.cassandra</groupId>
-            <artifactId>cassandra-driver-mapping</artifactId>
-            <version>${cassandra.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.datastax.cassandra</groupId>
-            <artifactId>cassandra-driver-extras</artifactId>
-            <version>${cassandra.version}</version>
-        </dependency> -->
-
 
         <!-- Added explicit call to guava version 18 because of a conflict
          between the dependency in the DSE driver and the one used by the
@@ -231,19 +182,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- <dependency>
-            <groupId>info.archinnov</groupId>
-            <artifactId>achilles-junit</artifactId>
-            <version>${achilles.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>info.archinnov</groupId>
-            <artifactId>achilles-embedded</artifactId>
-            <version>${achilles.version}</version>
-            <scope>test</scope>
-        </dependency> -->
     </dependencies>
 
     <build>
@@ -287,27 +225,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!--<plugin>-->
-                <!--<artifactId>maven-antrun-plugin</artifactId>-->
-                <!--<version>1.6</version>-->
-                <!--<executions>-->
-                    <!--<execution>-->
-                        <!--<phase>process-sources</phase>-->
-                        <!--<configuration>-->
-                            <!--<target>-->
-                                <!--<delete dir="${project.basedir}/src/main/generated/" includeemptydirs="true"/>-->
-                                <!--<move todir="${project.basedir}/src/main/generated//killrvideo" overwrite="true">-->
-                                    <!--<fileset dir="${project.build.directory}/generated-sources/protobuf/grpc-java/killrvideo"/>-->
-                                    <!--<fileset dir="${project.build.directory}/generated-sources/protobuf/java/killrvideo"/>-->
-                                <!--</move>-->
-                            <!--</target>-->
-                        <!--</configuration>-->
-                        <!--<goals>-->
-                            <!--<goal>run</goal>-->
-                        <!--</goals>-->
-                    <!--</execution>-->
-                <!--</executions>-->
-            <!--</plugin>-->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
