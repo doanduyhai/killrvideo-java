@@ -2,7 +2,6 @@ package killrvideo.service;
 
 import static java.util.stream.Collectors.toList;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
-import static com.datastax.driver.mapping.Mapper.Option.*;
 
 import java.text.SimpleDateFormat;
 import java.time.Instant;
@@ -22,7 +21,7 @@ import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
 import com.datastax.driver.core.PreparedStatement;
-import com.datastax.driver.core.Statement;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.mapping.Result;
 import killrvideo.entity.*;
 import killrvideo.utils.FutureUtils;
@@ -86,12 +85,16 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     KillrVideoInputValidator validator;
 
     private Session session;
+    private String videosTableName;
     private String latestVideosTableName;
     private String userVideosTableName;
     private PreparedStatement latestVideoPreview_startingPointPrepared;
     private PreparedStatement latestVideoPreview_noStartingPointPrepared;
     private PreparedStatement userVideoPreview_startingPointPrepared;
     private PreparedStatement userVideoPreview_noStartingPointPrepared;
+    private PreparedStatement submitYouTubeVideo_insertVideo;
+    private PreparedStatement submitYouTubeVideo_insertUserVideo;
+    private PreparedStatement submitYouTubeVideo_insertLatestVideo;
 
     @PostConstruct
     public void init(){
@@ -109,8 +112,11 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
          * Take a look at some of the other services to see QueryBuilder.bindmarker() examples.
          */
 
-        // Prepared statements for getLatestVideoPreviews()
+        videosTableName = videoMapper.getTableMetadata().getName();
         latestVideosTableName = latestVideosMapper.getTableMetadata().getName();
+        userVideosTableName = userVideosMapper.getTableMetadata().getName();
+
+        // Prepared statements for getLatestVideoPreviews()
         latestVideoPreview_startingPointPrepared = session.prepare(
                 "" +
                         "SELECT * " +
@@ -127,7 +133,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         );
 
         // Prepared statements for getUserVideoPreviews()
-        userVideosTableName = userVideosMapper.getTableMetadata().getName();
         userVideoPreview_startingPointPrepared = session.prepare(
                 "" +
                         "SELECT * " +
@@ -141,6 +146,44 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         "SELECT * " +
                         "FROM " + Schema.KEYSPACE + "." + userVideosTableName + " " +
                         "WHERE userid = :uid "
+        );
+
+
+        // Prepared statements for submitYouTubeVideo()
+        submitYouTubeVideo_insertVideo = session.prepare(
+                QueryBuilder
+                        .insertInto(Schema.KEYSPACE, videosTableName)
+                        .value("videoId", QueryBuilder.bindMarker())
+                        .value("userId", QueryBuilder.bindMarker())
+                        .value("name", QueryBuilder.bindMarker())
+                        .value("description", QueryBuilder.bindMarker())
+                        .value("location", QueryBuilder.bindMarker())
+                        .value("location_type", QueryBuilder.bindMarker())
+                        .value("preview_image_location", QueryBuilder.bindMarker())
+                        .value("tags", QueryBuilder.bindMarker())
+                        .value("added_date", QueryBuilder.bindMarker())
+        );
+
+        submitYouTubeVideo_insertUserVideo = session.prepare(
+                QueryBuilder
+                        .insertInto(Schema.KEYSPACE, userVideosTableName)
+                        .value("userid", QueryBuilder.bindMarker())
+                        .value("videoid", QueryBuilder.bindMarker())
+                        .value("name", QueryBuilder.bindMarker())
+                        .value("preview_image_location", QueryBuilder.bindMarker())
+                        .value("added_date", QueryBuilder.bindMarker())
+        );
+
+        submitYouTubeVideo_insertLatestVideo = session.prepare(
+                QueryBuilder
+                        .insertInto(Schema.KEYSPACE, latestVideosTableName)
+                        .value("yyyymmdd", QueryBuilder.bindMarker())
+                        .value("userId", QueryBuilder.bindMarker())
+                        .value("videoid", QueryBuilder.bindMarker())
+                        .value("name", QueryBuilder.bindMarker())
+                        .value("preview_image_location", QueryBuilder.bindMarker())
+                        .value("added_date", QueryBuilder.bindMarker())
+                        .using(QueryBuilder.ttl(LATEST_VIDEOS_TTL_SECONDS))
         );
     }
 
@@ -161,25 +204,39 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
         final UUID userId = UUID.fromString(request.getUserId().getValue());
 
-        //:TODO These either need to be prepared statements or proper async
-        final Statement s1 = videoMapper
-                .saveQuery(new Video(videoId, userId, request.getName(), request.getDescription(), location,
-                        VideoLocationType.YOUTUBE.ordinal(), previewImageLocation, Sets.newHashSet(request.getTagsList().iterator()), now));
+        final BoundStatement insertVideo = submitYouTubeVideo_insertVideo.bind()
+                .setUUID("videoid", videoId)
+                .setUUID("userid", userId)
+                .setString("name", request.getName())
+                .setString("description", request.getDescription())
+                .setString("location", location)
+                .setInt("location_type", VideoLocationType.YOUTUBE.ordinal())
+                .setString("preview_image_location", previewImageLocation)
+                .setSet("tags", Sets.newHashSet(request.getTagsList().iterator()))
+                .setTimestamp("added_date", now);
 
-        final Statement s2 = userVideosMapper
-                .saveQuery(new UserVideos(userId, videoId, request.getName(), previewImageLocation, now));
+        final BoundStatement insertUserVideo = submitYouTubeVideo_insertUserVideo.bind()
+                .setUUID("userid", userId)
+                .setUUID("videoid", videoId)
+                .setString("name", request.getName())
+                .setString("preview_image_location", previewImageLocation)
+                .setTimestamp("added_date", now);
 
-        final Statement s3 = latestVideosMapper
-                .saveQuery(new LatestVideos(yyyyMMdd, userId, videoId, request.getName(), previewImageLocation, now)
-                        ,ttl(LATEST_VIDEOS_TTL_SECONDS));
+        final BoundStatement insertLatestVideo = submitYouTubeVideo_insertLatestVideo.bind()
+                .setString("yyyymmdd", yyyyMMdd)
+                .setUUID("userid", userId)
+                .setUUID("videoid", videoId)
+                .setString("name", request.getName())
+                .setString("preview_image_location", previewImageLocation)
+                .setTimestamp("added_date", now);
 
         /**
          * Logged batch insert for automatic retry
          */
         final BatchStatement batchStatement = new BatchStatement(BatchStatement.Type.LOGGED);
-        batchStatement.add(s1);
-        batchStatement.add(s2);
-        batchStatement.add(s3);
+        batchStatement.add(insertVideo);
+        batchStatement.add(insertUserVideo);
+        batchStatement.add(insertLatestVideo);
         batchStatement.setDefaultTimestamp(now.getTime());
 
         FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
@@ -197,6 +254,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                                 .setTimestamp(TypeConverter.dateToTimestamp(now))
                                 .setUserId(request.getUserId())
                                 .setVideoId(request.getVideoId());
+
                         youTubeVideoAdded.addAllTags(Sets.newHashSet(request.getTagsList()));
 
                         /**
