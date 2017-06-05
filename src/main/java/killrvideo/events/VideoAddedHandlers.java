@@ -90,6 +90,7 @@ public class VideoAddedHandlers {
 
         LOGGER.debug("Handler thread " + Thread.currentThread().toString());
 
+        //:TODO Potential implement this with mapper async by using saveAsync and build each statement in the batch with a future and handle
         tags.forEach(tag -> {
             BoundStatement videosByTagBound = videosByTagPrepared.bind(
                     tag, videoId, addedDate, userId, name, previewImageLocation, taggedDate
@@ -99,24 +100,6 @@ public class VideoAddedHandlers {
                     tag.substring(0,1), tag
             );
 
-
-            //:TODO Potential implement this with mapper async by using saveAsync and build each statement in the batch with a future and handle
-            /**
-             * Technically, the prepared statements and bound statements with executeAsync()
-             * are just fine and work as expected, however, since these are such simple insert
-             * statements I can use the mapper and entities directly.  I would rather do that from
-             * an illustration standpoint and just need to work it out.
-             */
-//            batchStatement.add(
-//                    videosByTagMapper.saveQuery(
-//                            new VideoByTag(tag, videoId, userId, name, previewImageLocation, addedDate, taggedDate)
-//                    ));
-//
-//            batchStatement.add(
-//                    tagsByLetterMapper.saveQuery(
-//                            new TagsByLetter(tag.substring(0,1), tag)
-//                    ));
-//
             batchStatement.add(videosByTagBound);
             batchStatement.add(tagsByLetterBound);
         });

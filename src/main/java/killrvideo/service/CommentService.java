@@ -331,7 +331,6 @@ public class CommentService extends AbstractCommentsService {
          * the first video comment as reference point
          */
         if (startingCommentId == null || isBlank(startingCommentId.getValue())) {
-
             LOGGER.debug("Query without startingCommentId");
             statement = getVideoComments_noStartingPointPrepared.bind()
                     .setUUID("videoid", fromString(videoId.getValue()));

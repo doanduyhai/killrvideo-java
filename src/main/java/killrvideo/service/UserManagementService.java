@@ -272,7 +272,6 @@ public class UserManagementService extends AbstractUserManagementService {
             return;
         }
 
-        //:TODO Maybe replace new UUID[size] with lambda equivalent
         final UUID[] userIds = request
                 .getUserIdsList()
                 .stream()
