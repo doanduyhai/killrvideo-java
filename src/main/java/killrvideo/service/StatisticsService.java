@@ -90,8 +90,7 @@ public class StatisticsService extends AbstractStatisticsService {
                 .setUUID("videoid", videoId);
 
         FutureUtils.buildCompletableFuture(session.executeAsync(bound))
-                .handleAsync((rs, ex) -> {
-                    LOGGER.debug("Handler thread " + Thread.currentThread().toString());
+                .handle((rs, ex) -> {
                     if (rs != null) {
                         responseObserver.onNext(RecordPlaybackStartedResponse.newBuilder().build());
                         responseObserver.onCompleted();
@@ -135,7 +134,7 @@ public class StatisticsService extends AbstractStatisticsService {
         CompletableFuture
                 .allOf(statsFuture.toArray(new CompletableFuture[statsFuture.size()]))
                 .thenApply(v -> statsFuture.stream().map(CompletableFuture::join).collect(toList()))
-                .handleAsync((list, ex) ->{
+                .handle((list, ex) ->{
                     if (list != null) {
                         final Map<Uuid, PlayStats> result = list.stream()
                                 .filter(x -> x != null)

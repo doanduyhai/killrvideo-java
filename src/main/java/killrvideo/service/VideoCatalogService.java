@@ -497,7 +497,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
                 final CompletableFuture<Result<LatestVideos>> videosFuture = FutureUtils
                         .buildCompletableFuture(latestVideosMapper.mapAsync(session.executeAsync(bound)))
-                        .handleAsync((latestVideos, ex) -> { //:TODO Determine if we want to use Async version or not
+                        .handle((latestVideos, ex) -> {
                             if (latestVideos != null) {
                                 /**
                                  * For those of you wondering where the call to fetchMoreResults()

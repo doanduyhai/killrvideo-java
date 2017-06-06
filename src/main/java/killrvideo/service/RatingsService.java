@@ -113,8 +113,7 @@ public class RatingsService extends AbstractRatingsService {
                         FutureUtils.buildCompletableFuture(videoRatingByUserMapper
                                 .saveAsync(new VideoRatingByUser(videoId, userId, rating)))
                 )
-                .handleAsync((rs, ex) -> {
-                    LOGGER.debug("Handler thread " + Thread.currentThread().toString());
+                .handle((rs, ex) -> {
                     if (ex == null) {
                         eventBus.post(UserRatedVideo.newBuilder()
                                 .setVideoId(request.getVideoId())
@@ -150,7 +149,7 @@ public class RatingsService extends AbstractRatingsService {
 
         // videoId matches the partition key set in the VideoRating class
         FutureUtils.buildCompletableFuture(videoRatingMapper.getAsync(videoId))
-                .handleAsync((ratings, ex) -> {
+                .handle((ratings, ex) -> {
                     if (ex != null) {
                         LOGGER.error("Exception when getting video rating : " + mergeStackTrace(ex));
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
@@ -191,10 +190,9 @@ public class RatingsService extends AbstractRatingsService {
         final UUID userId = UUID.fromString(request.getUserId().getValue());
 
         FutureUtils.buildCompletableFuture(videoRatingByUserMapper.getAsync(videoId, userId))
-                .handleAsync((videoRating, ex) -> {
+                .handle((videoRating, ex) -> {
                     if (ex != null) {
                         LOGGER.error("Exception when getting user rating : " + mergeStackTrace(ex));
-
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
 
                     } else {

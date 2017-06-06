@@ -135,8 +135,9 @@ public class UserManagementService extends AbstractUserManagementService {
          */
         FutureUtils.buildCompletableFuture(session.executeAsync(checkEmailQuery))
                 /**
-                 * the "Async" portion of this method call will apply it
-                 * asynchronously in a different thread pool
+                 * I use the *Async() version of .handle below because I am
+                 * chaining multiple async futures.  In testing we found that chains like
+                 * this would cause timeouts possibly from starvation.
                  */
                 .handleAsync((rs, ex) -> {
                     try {
@@ -297,7 +298,6 @@ public class UserManagementService extends AbstractUserManagementService {
 
                     } else if (ex != null) {
                         LOGGER.error("Exception getting user profile : " + mergeStackTrace(ex));
-
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
 
                     }

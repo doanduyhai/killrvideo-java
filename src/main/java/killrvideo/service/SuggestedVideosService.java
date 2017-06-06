@@ -82,8 +82,12 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
          * Load the source video
          */
         FutureUtils.buildCompletableFuture(videoMapper.getAsync(videoId))
+                /**
+                 * I use the *Async() version of .handle below because I am
+                 * chaining multiple async futures.  In testing we found that chains like
+                 * this would cause timeouts possibly from starvation.
+                 */
                 .handleAsync((video, ex) -> {
-                    LOGGER.debug("Handler thread " + Thread.currentThread().toString());
                     if (video == null) {
                         returnNoResult(responseObserver, builder);
                         return null;
