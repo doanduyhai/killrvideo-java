@@ -11,8 +11,7 @@
     <properties>
         <start-class>killrvideo.KillrVideoServer</start-class>
         <grpc.version>1.0.0</grpc.version>
-        <achilles.version>5.1.5</achilles.version>
-        <dse.version>1.2.3</dse.version>
+        <dse.version>1.2.4</dse.version>
         <commons.lang3.version>3.3.2</commons.lang3.version>
         <commons-codec.version>1.10</commons-codec.version>
         <commons-collections.version>4.1</commons-collections.version>
