@@ -13,7 +13,6 @@
         <grpc.version>1.0.0</grpc.version>
         <achilles.version>5.1.5</achilles.version>
         <dse.version>1.2.3</dse.version>
-        <guava.version>18.0</guava.version>
         <commons.lang3.version>3.3.2</commons.lang3.version>
         <commons-codec.version>1.10</commons-codec.version>
         <commons-collections.version>4.1</commons-collections.version>
@@ -25,28 +24,9 @@
         <javax.el.api.version>2.2.4</javax.el.api.version>
         <validator.version>5.2.2.Final</validator.version>
         <etcd4j.version>1.2</etcd4j.version>
-        <mockito.version>1.9.5</mockito.version>
-        <assertj-core.version>1.7.0</assertj-core.version>
-        <junit.version>4.10</junit.version>
     </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>info.archinnov</groupId>
-            <artifactId>achilles-core</artifactId>
-            <version>${achilles.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.datastax.cassandra</groupId>
-                    <artifactId>cassandra-driver-core</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.datastax.cassandra</groupId>
-                    <artifactId>cassandra-driver-extras</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
         <!-- Java driver for DSE -->
         <dependency>
             <groupId>com.datastax.dse</groupId>
@@ -68,17 +48,6 @@
             <groupId>com.datastax.dse</groupId>
             <artifactId>dse-java-driver-extras</artifactId>
             <version>${dse.version}</version>
-        </dependency>
-
-        <!-- Added explicit call to guava version 18 because of a conflict
-         between the dependency in the DSE driver and the one used by the
-         core cassandra driver.  Actual call is to MoreExecutors.newDirectExecutorService()
-         in both CommentServiceTest and VideoCatalogServiceTest.  newDirectExecutorService()
-         does not exist in a previous version called by the DSE library. -->
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>${guava.version}</version>
         </dependency>
 
         <!-- Bean Validation -->
@@ -159,29 +128,6 @@
             <artifactId>logback-core</artifactId>
             <version>${logback.version}</version>
         </dependency>
-
-        <!--TEST-->
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>${junit.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>${mockito.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <version>${assertj-core.version}</version>
-            <scope>test</scope>
-        </dependency>
-
     </dependencies>
 
     <build>
