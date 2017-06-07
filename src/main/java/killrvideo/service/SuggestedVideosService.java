@@ -131,6 +131,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                                  */
                                 inFlightQueries.add(videoByTagMapper.mapAsync(session.executeAsync(statement)));
 
+                                //:TODO Refactor this section to break it up and make it easier to follow/read
                                 /** Every third query, or if this is the last tag, wait on all the query results **/
                                 if (inFlightQueries.size() == 3 || i == tags.size() - 1) {
                                     for (ListenableFuture<Result<VideoByTag>> videos : inFlightQueries) {

@@ -139,6 +139,7 @@ public class UserManagementService extends AbstractUserManagementService {
                  * chaining multiple async futures.  In testing we found that chains like
                  * this would cause timeouts possibly from starvation.
                  */
+                //TODO: Possibly refactor this section to make it easier to follow/read
                 .handleAsync((rs, ex) -> {
                     try {
                         if (rs != null) {
