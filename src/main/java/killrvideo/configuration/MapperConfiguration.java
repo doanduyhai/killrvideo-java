@@ -10,7 +10,7 @@ import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
 
 @Configuration
-public class DSEConfiguration {
+public class MapperConfiguration {
 
     @Inject
     MappingManager manager;
