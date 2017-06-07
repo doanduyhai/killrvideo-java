@@ -21,9 +21,9 @@ import killrvideo.utils.ExceptionUtils;
 
 
 @Configuration
-public class CassandraConfiguration {
+public class DSEConfiguration {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(CassandraConfiguration.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DSEConfiguration.class);
 
     private static final String CLUSTER_NAME = "killrvideo";
 
