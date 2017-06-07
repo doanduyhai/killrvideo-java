@@ -14,6 +14,7 @@ import org.springframework.core.env.Environment;
 
 import com.datastax.driver.dse.DseCluster;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.dse.auth.DsePlainTextAuthProvider;
 import com.xqbase.etcd4j.EtcdClient;
 
 import com.datastax.driver.mapping.MappingManager;
@@ -61,6 +62,9 @@ public class DSEConfiguration {
                     .addContactPoints(cassandraHosts)
                     .withPort(cassandraPort)
                     .withClusterName(CLUSTER_NAME)
+                    .withAuthProvider(new DsePlainTextAuthProvider(
+                            KillrVideoProperties.KILLRVIDEO_DSE_USERNAME, KillrVideoProperties.KILLRVIDEO_DSE_PASSWORD
+                    ))
                     .build();
 
             final Session session = cluster.connect();

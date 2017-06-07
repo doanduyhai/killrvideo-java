@@ -25,6 +25,8 @@ public class KillrVideoProperties {
     public static final String CASSANDRA_MUTATION_ERROR_LOG = "killrvideo.cassandra.mutation.error.log";
     public static final String KILLRVIDEO_DOCKER_IP = "KILLRVIDEO_DOCKER_IP";
     public static final String KILLRVIDEO_HOST_IP = "KILLRVIDEO_HOST_IP";
+    public static final String KILLRVIDEO_DSE_USERNAME = "KILLRVIDEO_DSE_USERNAME";
+    public static final String KILLRVIDEO_DSE_PASSWORD = "KILLRVIDEO_DSE_PASSWORD";
 
     public final int minThreads;
     public final int maxThreads;
@@ -37,6 +39,8 @@ public class KillrVideoProperties {
     public final String mutationErrorLog;
     public final String dockerIp;
     public final String serverIp;
+    public final String dseUsername;
+    public final String dsePassword;
 
     public KillrVideoProperties(Environment env) {
         this.minThreads = parseInt(env.getProperty(THREADPOOL_MIN_THREADS, "5"));
@@ -54,6 +58,12 @@ public class KillrVideoProperties {
          */
         final Optional<String> dockerIp = Optional.ofNullable(System.getenv(KILLRVIDEO_DOCKER_IP));
         final Optional<String> serverIp = Optional.ofNullable(System.getenv(KILLRVIDEO_HOST_IP));
+
+        /**
+         * Grab the DSE username and password from the environment as well
+         */
+        final Optional<String> dseUsername = Optional.ofNullable(System.getenv(KILLRVIDEO_DSE_USERNAME));
+        final Optional<String> dsePassword = Optional.ofNullable(System.getenv(KILLRVIDEO_DSE_PASSWORD));
 
         if (!dockerIp.isPresent()) {
             final String errorMessage = format("Cannot find environment variable %s. " +
@@ -76,6 +86,32 @@ public class KillrVideoProperties {
         } else {
             LOGGER.info("Setting server ip to : " + serverIp.get());
             this.serverIp = serverIp.get();
+        }
+
+        /**
+         * DSE username/password block
+         */
+        if (!dseUsername.isPresent()) {
+            final String errorMessage = format("Cannot find environment variable %s. " +
+                    "Using default username of 'cassandra' instead.  Please set it if you need a custom value", KILLRVIDEO_DSE_USERNAME);
+            LOGGER.warn(errorMessage);
+            this.dseUsername = "cassandra";
+
+        } else {
+            LOGGER.info("Setting DSE username to : " + dseUsername.get());
+            this.dseUsername = dseUsername.get();
+        }
+
+        if (!dsePassword.isPresent()) {
+            final String errorMessage = format("Cannot find environment variable %s. " +
+                    "Using default password of 'cassandra' instead.  Please set it if you need a custom value", KILLRVIDEO_DSE_PASSWORD);
+
+            LOGGER.warn(errorMessage);
+            this.dsePassword = "cassandra";
+
+        } else {
+            LOGGER.info("Setting DSE password to : " + dsePassword.get());
+            this.dsePassword = dsePassword.get();
         }
     }
 }
