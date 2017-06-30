@@ -12,6 +12,7 @@ import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
 import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
@@ -66,7 +67,7 @@ public class StatisticsService extends AbstractStatisticsService {
                         .update(Schema.KEYSPACE, videoPlaybackStatsTableName)
                         .with(QueryBuilder.incr("views")) //use incr() call to increment my counter field https://docs.datastax.com/en/developer/java-driver/3.2/faq/#how-do-i-increment-counters-with-query-builder
                         .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
     }
 
     @Override

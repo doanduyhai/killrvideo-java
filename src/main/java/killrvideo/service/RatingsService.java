@@ -68,7 +68,7 @@ public class RatingsService extends AbstractRatingsService {
                         .with(QueryBuilder.incr("rating_counter"))
                         .and(QueryBuilder.incr("rating_total", QueryBuilder.bindMarker()))
                         .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
     }
 
     @Override

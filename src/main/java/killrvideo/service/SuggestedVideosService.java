@@ -61,7 +61,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                         .select().all()
                         .from(Schema.KEYSPACE, videoByTagTableName)
                         .where(QueryBuilder.eq("tag", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
     }
 
     @Override

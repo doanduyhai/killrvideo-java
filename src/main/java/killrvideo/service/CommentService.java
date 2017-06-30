@@ -92,13 +92,13 @@ public class CommentService extends AbstractCommentsService {
                 "INSERT INTO " + Schema.KEYSPACE + "." + commentsByUserTableName + " " +
                         "(userid, commentid, comment, videoid) " +
                         "VALUES (?, ?, ?, ?)"
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         commentsByVideoPrepared = session.prepare(
                 "INSERT INTO " + Schema.KEYSPACE + "." + commentsByVideoTableName + " " +
                         "(videoid, commentid, comment, userid) " +
                         "VALUES (?, ?, ?, ?)"
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         // Prepared statements for getUserComments()
         /**
@@ -121,7 +121,7 @@ public class CommentService extends AbstractCommentsService {
                         .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
                         .from(Schema.KEYSPACE, commentsByUserTableName)
                         .where(QueryBuilder.eq("userid", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         getUserComments_startingPointPrepared = session.prepare(
                 QueryBuilder
@@ -134,7 +134,7 @@ public class CommentService extends AbstractCommentsService {
                         .from(Schema.KEYSPACE, commentsByUserTableName)
                         .where(QueryBuilder.eq("userid", QueryBuilder.bindMarker()))
                         .and(QueryBuilder.lte("commentid", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         // Prepared statements for getVideoComments()
         getVideoComments_noStartingPointPrepared = session.prepare(
@@ -147,7 +147,7 @@ public class CommentService extends AbstractCommentsService {
                     .fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
                     .from(Schema.KEYSPACE, commentsByVideoTableName)
                     .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         getVideoComments_startingPointPrepared = session.prepare(
                 QueryBuilder
@@ -160,7 +160,7 @@ public class CommentService extends AbstractCommentsService {
                         .from(Schema.KEYSPACE, commentsByVideoTableName)
                         .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
                         .and(QueryBuilder.lte("commentid", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
     }
 
     @Override

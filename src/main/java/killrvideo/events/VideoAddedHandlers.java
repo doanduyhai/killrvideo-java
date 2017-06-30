@@ -7,12 +7,9 @@ import java.util.UUID;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
-import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.core.*;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
-import com.datastax.driver.core.BatchStatement;
-import com.datastax.driver.core.BoundStatement;
-import com.datastax.driver.core.Session;
 import killrvideo.entity.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,12 +55,12 @@ public class VideoAddedHandlers {
                 "INSERT INTO " + Schema.KEYSPACE + "." + videosByTagTableName + " " +
                         "(tag, videoid, added_date, userid, name, preview_image_location, tagged_date) " +
                         "VALUES (?, ?, ?, ?, ?, ?, ?)"
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         tagsByLetterPrepared = session.prepare(
                 "INSERT INTO " + Schema.KEYSPACE + "." + tagsByLetterTableName + " " +
                         "(first_letter, tag) VALUES (?, ?)"
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
     }
 
     /**

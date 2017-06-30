@@ -77,7 +77,7 @@ public class UserManagementService extends AbstractUserManagementService {
                         .value("password", QueryBuilder.bindMarker())
                         .value("userid", QueryBuilder.bindMarker())
                         .ifNotExists() // use lightweight transaction
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         createUser_insertUserPrepared = session.prepare(
                 QueryBuilder
@@ -88,7 +88,7 @@ public class UserManagementService extends AbstractUserManagementService {
                         .value("email", QueryBuilder.bindMarker())
                         .value("created_date", QueryBuilder.bindMarker())
                         .ifNotExists() // use lightweight transaction
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         getUserProfile_getUsersPrepared = session.prepare(
                 QueryBuilder
@@ -96,7 +96,7 @@ public class UserManagementService extends AbstractUserManagementService {
                         .all()
                         .from(Schema.KEYSPACE, usersTableName)
                         .where(QueryBuilder.in("userid", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
     }
 
     @Override
