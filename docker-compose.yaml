@@ -4,7 +4,7 @@ version: '2'
 services:
   # Start the KillrVideo web UI on port 3000
   web:
-    image: killrvideo/killrvideo-web:1.2.3
+    image: killrvideo/killrvideo-web:1.2.4
     ports:
     - "3000:3000"
     depends_on:
@@ -13,15 +13,20 @@ services:
     environment:
       SERVICE_3000_NAME: web
       KILLRVIDEO_ETCD: "etcd:2379"
+      KILLRVIDEO_DSE_USERNAME: "$KILLRVIDEO_DSE_USERNAME"
+      KILLRVIDEO_DSE_PASSWORD: "$KILLRVIDEO_DSE_PASSWORD"
 
   # The sample data generator
   generator:
-    image: killrvideo/killrvideo-generator:1.2.1
+    image: killrvideo/killrvideo-generator:1.2.2
     depends_on:
     - dse
     - etcd
     environment:
       KILLRVIDEO_ETCD: "etcd:2379"
+      KILLRVIDEO_DSE_USERNAME: "$KILLRVIDEO_DSE_USERNAME"
+      KILLRVIDEO_DSE_PASSWORD: "$KILLRVIDEO_DSE_PASSWORD"
+      KILLRVIDEO_YOUTUBE_API_KEY: "$KILLRVIDEO_YOUTUBE_API_KEY"
 
   # One instance of DataStax Studio
   studio:
@@ -31,3 +36,12 @@ services:
     - "9091:9091"
     depends_on:
     - dse
+
+  server:
+    image: killrvideo/killrvideo-java-server
+    ports:
+    - "8899:8899"
+    depends_on:
+    - dse
+    - etcd
+    - web

@@ -123,14 +123,14 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         "FROM " + Schema.KEYSPACE + "." + latestVideosTableName + " " +
                         "WHERE yyyymmdd = :ymd " +
                         "AND (added_date, videoid) <= (:ad, :vid)"
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         latestVideoPreview_noStartingPointPrepared = session.prepare(
                 "" +
                         "SELECT * " +
                         "FROM " + Schema.KEYSPACE + "." + latestVideosTableName + " " +
                         "WHERE yyyymmdd = :ymd "
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         // Prepared statements for getUserVideoPreviews()
         userVideoPreview_startingPointPrepared = session.prepare(
@@ -139,14 +139,14 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         "FROM " + Schema.KEYSPACE + "." + userVideosTableName + " " +
                         "WHERE userid = :uid " +
                         "AND (added_date, videoid) <= (:ad, :vid)"
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         userVideoPreview_noStartingPointPrepared = session.prepare(
                 "" +
                         "SELECT * " +
                         "FROM " + Schema.KEYSPACE + "." + userVideosTableName + " " +
                         "WHERE userid = :uid "
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
 
         // Prepared statements for submitYouTubeVideo()
@@ -162,7 +162,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         .value("preview_image_location", QueryBuilder.bindMarker())
                         .value("tags", QueryBuilder.bindMarker())
                         .value("added_date", QueryBuilder.bindMarker())
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         submitYouTubeVideo_insertUserVideo = session.prepare(
                 QueryBuilder
@@ -172,7 +172,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         .value("name", QueryBuilder.bindMarker())
                         .value("preview_image_location", QueryBuilder.bindMarker())
                         .value("added_date", QueryBuilder.bindMarker())
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         submitYouTubeVideo_insertLatestVideo = session.prepare(
                 QueryBuilder
@@ -184,7 +184,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         .value("preview_image_location", QueryBuilder.bindMarker())
                         .value("added_date", QueryBuilder.bindMarker())
                         .using(QueryBuilder.ttl(LATEST_VIDEOS_TTL_SECONDS))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
     }
 
     @Override

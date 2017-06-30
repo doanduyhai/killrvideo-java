@@ -6,9 +6,7 @@ import java.util.Optional;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
-import com.datastax.driver.core.BoundStatement;
-import com.datastax.driver.core.PreparedStatement;
-import com.datastax.driver.core.Session;
+import com.datastax.driver.core.*;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
@@ -20,8 +18,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import com.datastax.driver.core.PagingState;
 
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -68,7 +64,7 @@ public class SearchService extends AbstractSearchService {
                         .all()
                         .from(Schema.KEYSPACE, videosByTagTableName)
                         .where(QueryBuilder.eq("tag", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         getQuerySuggestions_getTagsPrepared = session.prepare(
                 QueryBuilder
@@ -76,7 +72,7 @@ public class SearchService extends AbstractSearchService {
                         .from(Schema.KEYSPACE, tagsByLetterTableName)
                         .where(QueryBuilder.eq("first_letter", QueryBuilder.bindMarker()))
                         .and(QueryBuilder.gte("tag", QueryBuilder.bindMarker()))
-        );
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
     }
 
     @Override
