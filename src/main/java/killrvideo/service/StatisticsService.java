@@ -8,15 +8,24 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.core.Session;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.mapping.Mapper;
+import com.datastax.driver.mapping.MappingManager;
+import killrvideo.entity.Schema;
+import killrvideo.utils.FutureUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.google.common.eventbus.EventBus;
 
-import info.archinnov.achilles.generated.manager.VideoPlaybackStats_Manager;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import killrvideo.common.CommonTypes.Uuid;
@@ -32,13 +41,34 @@ public class StatisticsService extends AbstractStatisticsService {
     private static final Logger LOGGER = LoggerFactory.getLogger(StatisticsService.class);
 
     @Inject
-    VideoPlaybackStats_Manager videoPlaybackStatsManager;
+    Mapper<VideoPlaybackStats> videoPlaybackStatsMapper;
+
+    @Inject
+    MappingManager manager;
+
+    @Inject
+    EventBus eventBus;
 
     @Inject
     KillrVideoInputValidator validator;
 
-    @Inject
-    EventBus eventBus;
+    Session session;
+    private String videoPlaybackStatsTableName;
+    private PreparedStatement recordPlaybackStarted_incrStatsPrepared;
+
+    @PostConstruct
+    public void init(){
+        this.session = manager.getSession();
+
+        videoPlaybackStatsTableName = videoPlaybackStatsMapper.getTableMetadata().getName();
+
+        recordPlaybackStarted_incrStatsPrepared = session.prepare(
+                QueryBuilder
+                        .update(Schema.KEYSPACE, videoPlaybackStatsTableName)
+                        .with(QueryBuilder.incr("views")) //use incr() call to increment my counter field https://docs.datastax.com/en/developer/java-driver/3.2/faq/#how-do-i-increment-counters-with-query-builder
+                        .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
+    }
 
     @Override
     public void recordPlaybackStarted(RecordPlaybackStartedRequest request, StreamObserver<RecordPlaybackStartedResponse> responseObserver) {
@@ -57,14 +87,10 @@ public class StatisticsService extends AbstractStatisticsService {
          * a mutation log file for later replay by another
          * micro-service
          */
-        videoPlaybackStatsManager
-                .dsl()
-                .update()
-                .fromBaseTable()
-                .views().Incr()
-                .where()
-                .videoid().Eq(videoId)
-                .executeAsync()
+        BoundStatement bound = recordPlaybackStarted_incrStatsPrepared.bind()
+                .setUUID("videoid", videoId);
+
+        FutureUtils.buildCompletableFuture(session.executeAsync(bound))
                 .handle((rs, ex) -> {
                     if (rs != null) {
                         responseObserver.onNext(RecordPlaybackStartedResponse.newBuilder().build());
@@ -73,7 +99,6 @@ public class StatisticsService extends AbstractStatisticsService {
                         LOGGER.debug("End recording playback");
 
                     } else if (ex != null) {
-
                         LOGGER.error("Exception recording playback : " + mergeStackTrace(ex));
 
                         eventBus.post(new CassandraMutationError(request, ex));
@@ -86,7 +111,7 @@ public class StatisticsService extends AbstractStatisticsService {
     @Override
     public void getNumberOfPlays(GetNumberOfPlaysRequest request, StreamObserver<GetNumberOfPlaysResponse> responseObserver) {
 
-        LOGGER.debug("Start getting number of plays");
+        LOGGER.debug("-----Start getting number of plays------");
 
         if (!validator.isValid(request, responseObserver)) {
             return;
@@ -96,7 +121,8 @@ public class StatisticsService extends AbstractStatisticsService {
                 .getVideoIdsList()
                 .stream()
                 .map(uuid -> UUID.fromString(uuid.getValue()))
-                .map(uuid -> videoPlaybackStatsManager.crud().findById(uuid).getAsync())
+                .map(uuid -> videoPlaybackStatsMapper.getAsync(uuid))
+                .map(uuid -> FutureUtils.buildCompletableFuture(uuid))
                 .collect(toList());
 
         final GetNumberOfPlaysResponse.Builder builder = GetNumberOfPlaysResponse
@@ -109,9 +135,8 @@ public class StatisticsService extends AbstractStatisticsService {
         CompletableFuture
                 .allOf(statsFuture.toArray(new CompletableFuture[statsFuture.size()]))
                 .thenApply(v -> statsFuture.stream().map(CompletableFuture::join).collect(toList()))
-                .handle((list,ex) ->{
+                .handle((list, ex) ->{
                     if (list != null) {
-
                         final Map<Uuid, PlayStats> result = list.stream()
                                 .filter(x -> x != null)
                                 .map(VideoPlaybackStats::toPlayStats)

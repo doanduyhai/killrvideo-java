@@ -5,28 +5,27 @@ import static killrvideo.entity.Schema.KEYSPACE;
 import java.util.Date;
 import java.util.UUID;
 
-import info.archinnov.achilles.annotations.*;
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+import com.datastax.driver.mapping.annotations.ClusteringColumn;
 
-@Table(keyspace = KEYSPACE, table = "video_recommendations_by_video")
+@Table(keyspace = KEYSPACE, name = "video_recommendations_by_video")
 public class VideoRecommandationsByVideo {
 
     @PartitionKey
     private UUID videoid;
 
-    @Column("added_date")
-    @Static
+    @Column(name = "added_date")
     private Date addedDate;
 
     @Column
-    @Static
     private UUID authorid;
 
     @Column
-    @Static
     private String name;
 
-    @Column("preview_image_location")
-    @Static
+    @Column(name = "preview_image_location")
     private String previewImageLocation;
 
     @ClusteringColumn

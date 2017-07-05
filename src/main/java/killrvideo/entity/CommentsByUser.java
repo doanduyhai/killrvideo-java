@@ -2,30 +2,25 @@ package killrvideo.entity;
 
 import static java.util.UUID.fromString;
 import static killrvideo.entity.Schema.KEYSPACE;
-import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
-import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
 import javax.validation.constraints.NotNull;
-
-import org.apache.commons.lang3.StringUtils;
 import org.hibernate.validator.constraints.NotBlank;
 
-import info.archinnov.achilles.annotations.*;
+import com.datastax.driver.mapping.annotations.*;
 import killrvideo.comments.CommentsServiceOuterClass;
 import killrvideo.comments.CommentsServiceOuterClass.CommentOnVideoRequest;
 import killrvideo.utils.TypeConverter;
 
-@Table(keyspace = KEYSPACE, table = "comments_by_user")
+@Table(keyspace = KEYSPACE, name = "comments_by_user")
 public class CommentsByUser {
 
     @PartitionKey
     private UUID userid;
 
-    @ClusteringColumn(asc = false)
-    @TimeUUID
+    @ClusteringColumn
     private UUID commentid;
 
     @NotNull
@@ -36,15 +31,24 @@ public class CommentsByUser {
     @Column
     private String comment;
 
-    @Column
+    /**
+     * In order to properly use the @Computed annotation for dateOfComment
+     * you must execute a query using the mapper with this entity, NOT QueryBuilder.
+     * If QueryBuilder is used you must use a call to fcall() and pass the CQL function
+     * needed to it directly.  Here is an example pulled from CommentsByVideo.getVideoComments().
+     * fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
+     * This will execute the toTimeStamp() function against the commentid column and return the
+     * result with an alias of comment_timestamp.  Again, reference CommentService.getUserComments()
+     * or CommentService.getVideoComments() for examples of how to implement.
+     */
     @NotNull
-    @Computed(function = "toTimestamp", targetColumns = {"commentid"}, alias = "comment_timestamp", cqlClass = Date.class)
+    @Computed("toTimestamp(commentid)")
     private Date dateOfComment;
 
     public CommentsByUser() {
     }
 
-    public CommentsByUser(UUID userid, UUID videoid, UUID commentid, String comment) {
+    public CommentsByUser(UUID userid, UUID commentid, UUID videoid, String comment) {
         this.userid = userid;
         this.commentid = commentid;
         this.videoid = videoid;

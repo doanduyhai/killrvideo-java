@@ -25,6 +25,8 @@ public class KillrVideoProperties {
     public static final String CASSANDRA_MUTATION_ERROR_LOG = "killrvideo.cassandra.mutation.error.log";
     public static final String KILLRVIDEO_DOCKER_IP = "KILLRVIDEO_DOCKER_IP";
     public static final String KILLRVIDEO_HOST_IP = "KILLRVIDEO_HOST_IP";
+    public static final String KILLRVIDEO_DSE_USERNAME = "KILLRVIDEO_DSE_USERNAME";
+    public static final String KILLRVIDEO_DSE_PASSWORD = "KILLRVIDEO_DSE_PASSWORD";
 
     public final int minThreads;
     public final int maxThreads;
@@ -37,6 +39,8 @@ public class KillrVideoProperties {
     public final String mutationErrorLog;
     public final String dockerIp;
     public final String serverIp;
+    public final String dseUsername;
+    public final String dsePassword;
 
     public KillrVideoProperties(Environment env) {
         this.minThreads = parseInt(env.getProperty(THREADPOOL_MIN_THREADS, "5"));
@@ -56,7 +60,6 @@ public class KillrVideoProperties {
         final Optional<String> serverIp = Optional.ofNullable(System.getenv(KILLRVIDEO_HOST_IP));
 
         if (!dockerIp.isPresent()) {
-
             final String errorMessage = format("Cannot find environment variable %s. " +
                     "Please set it before launching KillrVideoServer", KILLRVIDEO_DOCKER_IP);
             LOGGER.error(errorMessage);
@@ -68,15 +71,23 @@ public class KillrVideoProperties {
         }
 
         if (!serverIp.isPresent()) {
-
             final String errorMessage = format("Cannot find environment variable %s. " +
                     "Please set it before launching KillrVideoServer", KILLRVIDEO_HOST_IP);
 
             LOGGER.error(errorMessage);
             throw new IllegalStateException(errorMessage);
+
         } else {
             LOGGER.info("Setting server ip to : " + serverIp.get());
             this.serverIp = serverIp.get();
         }
+
+        /**
+         * Grab the DSE username and password from the environment as well if they exist
+         */
+        final Optional<String> dseUsername = Optional.ofNullable(System.getenv(KILLRVIDEO_DSE_USERNAME));
+        final Optional<String> dsePassword = Optional.ofNullable(System.getenv(KILLRVIDEO_DSE_PASSWORD));
+        this.dseUsername = dseUsername.orElse(null);
+        this.dsePassword = dsePassword.orElse(null);
     }
 }

@@ -3,7 +3,6 @@ package killrvideo.entity;
 import static java.util.UUID.fromString;
 import static killrvideo.entity.Schema.KEYSPACE;
 
-import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
@@ -11,20 +10,18 @@ import javax.validation.constraints.NotNull;
 
 import org.hibernate.validator.constraints.NotBlank;
 
-import info.archinnov.achilles.annotations.*;
-import info.archinnov.achilles.validation.Validator;
+import com.datastax.driver.mapping.annotations.*;
 import killrvideo.comments.CommentsServiceOuterClass;
 import killrvideo.comments.CommentsServiceOuterClass.CommentOnVideoRequest;
 import killrvideo.utils.TypeConverter;
 
-@Table(keyspace = KEYSPACE, table = "comments_by_video")
+@Table(keyspace = KEYSPACE, name = "comments_by_video")
 public class CommentsByVideo {
 
     @PartitionKey
     private UUID videoid;
 
-    @ClusteringColumn(asc = false)
-    @TimeUUID
+    @ClusteringColumn
     private UUID commentid;
 
     @NotNull
@@ -35,12 +32,28 @@ public class CommentsByVideo {
     @Column
     private String comment;
 
+    /**
+     * In order to properly use the @Computed annotation for dateOfComment
+     * you must execute a query using the mapper with this entity, NOT QueryBuilder.
+     * If QueryBuilder is used you must use a call to fcall() and pass the CQL function
+     * needed to it directly.  Here is an example pulled from CommentsByVideo.getVideoComments().
+     * fcall("toTimestamp", QueryBuilder.column("commentid")).as("comment_timestamp")
+     * This will execute the toTimeStamp() function against the commentid column and return the
+     * result with an alias of comment_timestamp.  Again, reference CommentService.getUserComments()
+     * or CommentService.getVideoComments() for examples of how to implement.
+     */
     @NotNull
-    @Column
-    @Computed(function = "toTimestamp", targetColumns = {"commentid"}, alias = "comment_timestamp", cqlClass = Date.class)
+    @Computed("toTimestamp(commentid)")
     private Date dateOfComment;
 
     public CommentsByVideo() {
+    }
+
+    public CommentsByVideo(UUID videoid, UUID commentid, UUID userid, String comment) {
+        this.videoid = videoid;
+        this.commentid = commentid;
+        this.userid = userid;
+        this.comment = comment;
     }
 
     public CommentsByVideo(CommentOnVideoRequest request) {

@@ -4,16 +4,16 @@ import static killrvideo.entity.Schema.KEYSPACE;
 
 import org.hibernate.validator.constraints.NotBlank;
 
-import info.archinnov.achilles.annotations.ClusteringColumn;
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.ClusteringColumn;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
 
-@Table(keyspace = KEYSPACE, table = "tags_by_letter")
+@Table(keyspace = KEYSPACE, name = "tags_by_letter")
 public class TagsByLetter {
 
     @PartitionKey
-    @Column("first_letter")
+    @Column(name = "first_letter")
     private String firstLetter;
 
     @NotBlank

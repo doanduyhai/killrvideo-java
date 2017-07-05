@@ -5,22 +5,25 @@ import static killrvideo.entity.Schema.KEYSPACE;
 import java.util.Optional;
 import java.util.UUID;
 
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.Counter;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
-import killrvideo.statistics.StatisticsServiceOuterClass;
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+
 import killrvideo.statistics.StatisticsServiceOuterClass.PlayStats;
 import killrvideo.utils.TypeConverter;
 
-@Table(keyspace = KEYSPACE, table = "video_playback_stats")
+@Table(keyspace = KEYSPACE, name = "video_playback_stats")
 public class VideoPlaybackStats {
 
     @PartitionKey
     private UUID videoid;
 
+    /**
+     * "views" column is a counter type in the underlying DSE database.  As of driver version 3.2 there
+     * is no "@Counter" annotation that I know of.  No worries though, just use the incr() function
+     * while using the QueryBuilder.  Something similar to with(QueryBuilder.incr("views")).
+     */
     @Column
-    @Counter
     private Long views;
 
     public UUID getVideoid() {

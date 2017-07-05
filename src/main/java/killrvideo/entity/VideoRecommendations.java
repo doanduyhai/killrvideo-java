@@ -4,11 +4,11 @@ import static killrvideo.entity.Schema.KEYSPACE;
 
 import java.util.UUID;
 
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
 
-@Table(keyspace = KEYSPACE, table = "video_recommendations")
+@Table(keyspace = KEYSPACE, name = "video_recommendations")
 public class VideoRecommendations extends AbstractVideoList {
 
     @PartitionKey

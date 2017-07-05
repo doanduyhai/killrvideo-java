@@ -22,7 +22,6 @@ public class KillrVideoThreadFactory implements ThreadFactory {
     }
 
     public Thread newThread(Runnable r) {
-
         Thread thread = new Thread(r);
         thread.setName("killrvideo-default-executor-" + this.threadNumber.incrementAndGet());
         thread.setDaemon(true);
