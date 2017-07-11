@@ -18,7 +18,7 @@ services:
 
   # The sample data generator
   generator:
-    image: killrvideo/killrvideo-generator:1.2.2
+    image: killrvideo/killrvideo-generator:1.2.3
     depends_on:
     - dse
     - etcd
@@ -27,6 +27,9 @@ services:
       KILLRVIDEO_DSE_USERNAME: $KILLRVIDEO_DSE_USERNAME
       KILLRVIDEO_DSE_PASSWORD: $KILLRVIDEO_DSE_PASSWORD
       KILLRVIDEO_YOUTUBE_API_KEY: $KILLRVIDEO_YOUTUBE_API_KEY
+      NODE_ENV: $NODE_ENV
+      KILLRVIDEO_CASSANDRA_REPLICATION: $KILLRVIDEO_CASSANDRA_REPLICATION
+      KILLRVIDEO_LOGGING_LEVEL: $KILLRVIDEO_LOGGING_LEVEL
 
   # One instance of DataStax Studio
   studio:
