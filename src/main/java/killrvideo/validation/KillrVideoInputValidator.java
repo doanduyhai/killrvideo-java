@@ -206,7 +206,7 @@ public class KillrVideoInputValidator {
             isValid = false;
         }
 
-        if (request.getVideoIdsCount() >= 20) {
+        if (request.getVideoIdsCount() > 20) {
             errorMessage.append("\t\tcannot do a get more than 20 videos at once for get number of plays request\n");
             isValid = false;
         }
@@ -276,7 +276,7 @@ public class KillrVideoInputValidator {
         boolean isValid = true;
 
 
-        if (request.getUserIdsCount() >= 20) {
+        if (request.getUserIdsCount() > 20) {
             errorMessage.append("\t\tcannot get more than 20 user profiles at once for get user profile request\n");
             isValid = false;
         }
