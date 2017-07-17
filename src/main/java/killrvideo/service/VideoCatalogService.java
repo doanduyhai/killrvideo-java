@@ -25,6 +25,7 @@ import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.mapping.Result;
 import killrvideo.entity.*;
 import killrvideo.utils.FutureUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -295,9 +296,16 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 .handle((video, ex) -> {
                     if (video != null) {
                         LOGGER.debug("Video is: " + (video.getName()));
+
+                        /**
+                         * Check to see if any tags exist, if not, ensure to send
+                         * an empty set instead of null
+                         */
+                        if (CollectionUtils.isEmpty(video.getTags())) {
+                            video.setTags(Collections.emptySet());
+                        }
                         responseObserver.onNext((video.toVideoResponse()));
                         responseObserver.onCompleted();
-                        LOGGER.debug("End getting video");
 
                     } else if (video == null) {
                         LOGGER.warn("Video with id " + videoId + " was not found");
@@ -311,6 +319,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                     }
                     return video;
                 });
+        LOGGER.debug("End getting video");
     }
 
     @Override

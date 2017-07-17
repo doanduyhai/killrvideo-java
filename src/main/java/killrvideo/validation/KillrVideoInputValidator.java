@@ -357,11 +357,6 @@ public class KillrVideoInputValidator {
             isValid = false;
         }
 
-        if (request.getTagsList() == null || CollectionUtils.isEmpty(request.getTagsList())) {
-            errorMessage.append("\t\tvideo tags list should be provided for submit youtube video request\n");
-            isValid = false;
-        }
-
         return validate(streamObserver, errorMessage, isValid);
     }
 
