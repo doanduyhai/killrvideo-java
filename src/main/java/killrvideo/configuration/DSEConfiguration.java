@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 
+import com.datastax.dse.graph.api.DseGraph;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -14,8 +16,9 @@ import org.springframework.core.env.Environment;
 
 import com.datastax.driver.dse.DseCluster;
 import com.datastax.driver.dse.DseCluster.Builder;
-import com.datastax.driver.core.Session;
 import com.datastax.driver.dse.auth.DsePlainTextAuthProvider;
+import com.datastax.driver.dse.DseSession;
+import com.datastax.driver.dse.graph.GraphOptions;
 import com.xqbase.etcd4j.EtcdClient;
 
 import com.datastax.driver.mapping.MappingManager;
@@ -28,6 +31,8 @@ public class DSEConfiguration {
     private static final Logger LOGGER = LoggerFactory.getLogger(DSEConfiguration.class);
 
     private static final String CLUSTER_NAME = "killrvideo";
+    private static final String RECOMMENDATION_GRAPH_NAME = "killrvideo_video_recommendations";
+    private static final Integer GRAPH_TIMEOUT_DEFAULT = 30000;
 
     @Inject
     Environment env;
@@ -39,8 +44,7 @@ public class DSEConfiguration {
     private KillrVideoProperties properties;
 
     @Bean
-    public MappingManager cassandraNativeClusterProduction() {
-
+    public DseSession initializeDSE() {
         LOGGER.info("Initializing connection to Cassandra");
         LOGGER.info("ETCD Client is: " + etcdClient.toString());
 
@@ -90,13 +94,17 @@ public class DSEConfiguration {
 
             }
 
-            DseCluster cluster = clusterConfig.build();
-            final Session session = cluster.connect();
+            /**
+             * Add option for the graph based recommendation engine
+             */
+            clusterConfig.withGraphOptions(new GraphOptions()
+                    .setGraphName(RECOMMENDATION_GRAPH_NAME)
+                    .setReadTimeoutMillis(GRAPH_TIMEOUT_DEFAULT)
+            );
 
-            final MappingManager manager = new MappingManager(session);
-            LOGGER.info(String.format("Creating mapping manager %s", manager));
+            DseCluster dseCluster = clusterConfig.build();
 
-            return manager;
+            return dseCluster.connect();
 
         } catch (Throwable e) {
             LOGGER.error("Exception : " + e.getMessage());
@@ -104,5 +112,30 @@ public class DSEConfiguration {
 
             throw new IllegalStateException("Cannot find 'killrvideo/services/cassandra' from etcd");
         }
+
+    }
+
+    @Bean
+    public Void cassandraNativeClusterProduction() {
+        // Initialize DSE
+        final DseSession dseSession = initializeDSE();
+
+        final MappingManager manager = setMappingManager(dseSession);
+        LOGGER.info(String.format("Creating mapping manager %s", manager));
+
+        final GraphTraversalSource g = setGraphTraversalSource(dseSession);
+        LOGGER.info(String.format("Creating graph traversal source %s", g));
+
+        return null;
+    }
+
+    @Bean
+    public MappingManager setMappingManager(DseSession session) {
+        return new MappingManager(session);
+    }
+
+    @Bean
+    public GraphTraversalSource setGraphTraversalSource(DseSession session) {
+        return DseGraph.traversal(session);
     }
 }
