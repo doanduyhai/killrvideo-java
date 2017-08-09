@@ -48,6 +48,11 @@
             <artifactId>dse-java-driver-extras</artifactId>
             <version>${dse.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.datastax.dse</groupId>
+            <artifactId>dse-java-driver-graph</artifactId>
+            <version>${dse.version}</version>
+        </dependency>
 
         <!-- Bean Validation -->
         <dependency>
