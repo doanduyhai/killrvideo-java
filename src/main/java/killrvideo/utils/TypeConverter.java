@@ -21,6 +21,10 @@ public class TypeConverter {
         return instantToTimeStamp(date.toInstant());
     }
 
+    public static Date dateFromTimestamp(Timestamp timestamp) {
+        return Date.from(Instant.ofEpochSecond(timestamp.getSeconds()));
+    }
+
     public static TimeUuid uuidToTimeUuid(UUID uuid) {
         return TimeUuid.newBuilder()
                 .setValue(uuid.toString())

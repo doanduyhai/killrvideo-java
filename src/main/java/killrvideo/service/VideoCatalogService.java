@@ -1,55 +1,56 @@
 package killrvideo.service;
 
-import static java.util.stream.Collectors.toList;
-import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
-
-import java.text.SimpleDateFormat;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.Date;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.CompletableFuture;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.LongStream;
-
-import javax.annotation.PostConstruct;
-import javax.inject.Inject;
-
-import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.core.*;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.dse.DseSession;
+import com.datastax.driver.mapping.Mapper;
+import com.datastax.driver.mapping.MappingManager;
 import com.datastax.driver.mapping.Result;
-import killrvideo.entity.*;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.common.eventbus.EventBus;
+import com.google.protobuf.ProtocolStringList;
+import io.grpc.Status;
+import io.grpc.stub.StreamObserver;
+
+import killrvideo.common.CommonTypes.Uuid;
+import killrvideo.entity.LatestVideos;
+import killrvideo.entity.Schema;
+import killrvideo.entity.UserVideos;
+import killrvideo.entity.Video;
+import killrvideo.events.CassandraMutationError;
+import killrvideo.graph.KillrVideoTraversalSource;
 import killrvideo.utils.FutureUtils;
+import killrvideo.utils.TypeConverter;
+import killrvideo.validation.KillrVideoInputValidator;
+import killrvideo.video_catalog.VideoCatalogServiceGrpc.AbstractVideoCatalogService;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.*;
+import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
+
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
+import javax.inject.Inject;
+import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
-import com.datastax.driver.mapping.Mapper;
-import com.datastax.driver.mapping.MappingManager;
-import com.datastax.driver.core.*;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.google.common.eventbus.EventBus;
-
-import io.grpc.Status;
-import io.grpc.stub.StreamObserver;
-
-import killrvideo.events.CassandraMutationError;
-import killrvideo.common.CommonTypes.Uuid;
-import killrvideo.utils.TypeConverter;
-import killrvideo.validation.KillrVideoInputValidator;
-import killrvideo.video_catalog.VideoCatalogServiceGrpc.AbstractVideoCatalogService;
-import killrvideo.video_catalog.VideoCatalogServiceOuterClass.*;
-import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
+import static java.util.stream.Collectors.toList;
+import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 @Service
 public class VideoCatalogService extends AbstractVideoCatalogService {
@@ -80,12 +81,15 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     MappingManager manager;
 
     @Inject
+    DseSession dseSession;
+
+    @Inject
     EventBus eventBus;
 
     @Inject
     KillrVideoInputValidator validator;
 
-    private Session session;
+    private DseSession session;
     private String videosTableName;
     private String latestVideosTableName;
     private String userVideosTableName;
@@ -99,7 +103,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
     @PostConstruct
     public void init(){
-        this.session = manager.getSession();
+        this.session = dseSession;
 
         /**
          * Set the following up in PostConstruct because 1) we have to
@@ -201,6 +205,9 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
         final String yyyyMMdd = dateFormat.format(now);
         final String location = request.getYouTubeVideoId();
+        final String name = request.getName();
+        final String description = request.getDescription();
+        final ProtocolStringList tagsList = request.getTagsList();
         final String previewImageLocation = "//img.youtube.com/vi/"+ location + "/hqdefault.jpg";
         final UUID videoId = UUID.fromString(request.getVideoId().getValue());
         final UUID userId = UUID.fromString(request.getUserId().getValue());
@@ -208,18 +215,18 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         final BoundStatement insertVideo = submitYouTubeVideo_insertVideo.bind()
                 .setUUID("videoid", videoId)
                 .setUUID("userid", userId)
-                .setString("name", request.getName())
-                .setString("description", request.getDescription())
+                .setString("name", name)
+                .setString("description", description)
                 .setString("location", location)
                 .setInt("location_type", VideoLocationType.YOUTUBE.ordinal())
                 .setString("preview_image_location", previewImageLocation)
-                .setSet("tags", Sets.newHashSet(request.getTagsList().iterator()))
+                .setSet("tags", Sets.newHashSet(tagsList.iterator()))
                 .setTimestamp("added_date", now);
 
         final BoundStatement insertUserVideo = submitYouTubeVideo_insertUserVideo.bind()
                 .setUUID("userid", userId)
                 .setUUID("videoid", videoId)
-                .setString("name", request.getName())
+                .setString("name", name)
                 .setString("preview_image_location", previewImageLocation)
                 .setTimestamp("added_date", now);
 
@@ -227,7 +234,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 .setString("yyyymmdd", yyyyMMdd)
                 .setUUID("userid", userId)
                 .setUUID("videoid", videoId)
-                .setString("name", request.getName())
+                .setString("name", name)
                 .setString("preview_image_location", previewImageLocation)
                 .setTimestamp("added_date", now);
 
@@ -240,7 +247,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         batchStatement.add(insertLatestVideo);
         batchStatement.setDefaultTimestamp(now.getTime());
 
-        FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
+        CompletableFuture<ResultSet> insertUserFuture = FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
                 .handle((rs, ex) -> {
                     if (rs != null) {
                         /**
@@ -248,19 +255,21 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                          */
                         final YouTubeVideoAdded.Builder youTubeVideoAdded = YouTubeVideoAdded.newBuilder()
                                 .setAddedDate(TypeConverter.dateToTimestamp(now))
-                                .setDescription(request.getDescription())
+                                .setDescription(description)
                                 .setLocation(location)
-                                .setName(request.getName())
+                                .setName(name)
                                 .setPreviewImageLocation(previewImageLocation)
                                 .setTimestamp(TypeConverter.dateToTimestamp(now))
                                 .setUserId(request.getUserId())
                                 .setVideoId(request.getVideoId());
 
-                        youTubeVideoAdded.addAllTags(Sets.newHashSet(request.getTagsList()));
+                        youTubeVideoAdded.addAllTags(Sets.newHashSet(tagsList));
 
                         /**
-                         * eventbus.post() below is located in the VideoAddedhandlers class within
-                         * the handle() method.  The youTubeVideoAdded type triggers the handler.
+                         * eventbus.post() for youTubeVideoAdded below is located both in the
+                         * VideoAddedhandlers and SuggestedVideos Service classes within the handle() method.
+                         * The YouTubeVideoAdded type triggers the handler.  The call in SuggestedVideos is
+                         * responsible for adding data into our graph recommendation engine.
                          */
                         eventBus.post(youTubeVideoAdded.build());
 

@@ -1,40 +1,44 @@
 package killrvideo.service;
 
-
-import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
-
-import java.util.Arrays;
-import java.util.Date;
-import java.util.UUID;
-
-import javax.annotation.PostConstruct;
-import javax.inject.Inject;
-
-import com.datastax.driver.core.*;
-import killrvideo.entity.Schema;
-import killrvideo.utils.FutureUtils;
-import org.apache.commons.collections4.CollectionUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
-import com.google.common.eventbus.EventBus;
-
+import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.core.ResultSet;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
-import com.datastax.driver.core.querybuilder.QueryBuilder;
 
+import com.google.common.eventbus.EventBus;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+
+import killrvideo.common.CommonTypes;
+import killrvideo.entity.Schema;
 import killrvideo.entity.User;
 import killrvideo.entity.UserCredentials;
 import killrvideo.events.CassandraMutationError;
 import killrvideo.user_management.UserManagementServiceGrpc.AbstractUserManagementService;
 import killrvideo.user_management.UserManagementServiceOuterClass.*;
 import killrvideo.user_management.events.UserManagementEvents.UserCreated;
+import killrvideo.utils.FutureUtils;
 import killrvideo.utils.HashUtils;
 import killrvideo.utils.TypeConverter;
 import killrvideo.validation.KillrVideoInputValidator;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.PostConstruct;
+import javax.inject.Inject;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 @Service
 public class UserManagementService extends AbstractUserManagementService {
@@ -51,12 +55,15 @@ public class UserManagementService extends AbstractUserManagementService {
     MappingManager manager;
 
     @Inject
+    DseSession dseSession;
+
+    @Inject
     EventBus eventBus;
 
     @Inject
     KillrVideoInputValidator validator;
 
-    private Session session;
+    private DseSession session;
     private String usersTableName;
     private String userCredentialsTableName;
     private PreparedStatement createUser_checkEmailPrepared;
@@ -65,7 +72,7 @@ public class UserManagementService extends AbstractUserManagementService {
 
     @PostConstruct
     public void init(){
-        this.session = manager.getSession();
+        this.session = dseSession;
 
         usersTableName = userMapper.getTableMetadata().getName();
         userCredentialsTableName = userCredentialsMapper.getTableMetadata().getName();
@@ -109,7 +116,10 @@ public class UserManagementService extends AbstractUserManagementService {
         }
 
         final Date now = new Date();
-        final UUID userId = UUID.fromString(request.getUserId().getValue());
+        final CommonTypes.Uuid userIdUuid = request.getUserId();
+        final UUID userIdUUID = UUID.fromString(userIdUuid.getValue());
+        final String firstName = request.getFirstName();
+        final String lastName = request.getLastName();
 
         /** Trim the password **/
         final String hashedPassword = HashUtils.hashPassword(request.getPassword().trim());
@@ -125,7 +135,7 @@ public class UserManagementService extends AbstractUserManagementService {
         final BoundStatement checkEmailQuery = createUser_checkEmailPrepared.bind()
                 .setString("email", email)
                 .setString("password", hashedPassword)
-                .setUUID("userid", userId);
+                .setUUID("userid", userIdUUID);
 
         /**
          * Note that we have multiple executeAsync() calls in the following chain.
@@ -133,13 +143,12 @@ public class UserManagementService extends AbstractUserManagementService {
          * the user into the users table.  Both cases use lightweight transactions
          * to ensure we are not duplicating already existing users within the database.
          */
-        FutureUtils.buildCompletableFuture(session.executeAsync(checkEmailQuery))
+        CompletableFuture<ResultSet> checkEmailFuture = FutureUtils.buildCompletableFuture(session.executeAsync(checkEmailQuery))
                 /**
                  * I use the *Async() version of .handle below because I am
                  * chaining multiple async futures.  In testing we found that chains like
                  * this would cause timeouts possibly from starvation.
                  */
-                //TODO: Possibly refactor this section to make it easier to follow/read
                 .handleAsync((rs, ex) -> {
                     try {
                         if (rs != null) {
@@ -151,25 +160,10 @@ public class UserManagementService extends AbstractUserManagementService {
                              * http://docs.datastax.com/en/drivers/java/3.2/com/datastax/driver/core/ResultSet.html#wasApplied--
                              * that allows an easy check of a conditional statement.
                              */
-                            if (rs.wasApplied()) {
-                                /**
-                                 * No LWT error, we can proceed further
-                                 * Execute our insert statement in an async
-                                 * fashion as well and pass the result to the next
-                                 * line in the chain
-                                 */
-                                final BoundStatement insertUser = createUser_insertUserPrepared.bind()
-                                        .setUUID("userid", userId)
-                                        .setString("firstname", request.getFirstName())
-                                        .setString("lastname", request.getLastName())
-                                        .setString("email", email)
-                                        .setTimestamp("created_date", now);
-
-                                return FutureUtils.buildCompletableFuture(session.executeAsync(insertUser));
-
-                            } else { // throw in case our LWT fails
+                            if (!rs.wasApplied()) {
                                 throw new Throwable(exceptionMessage);
                             }
+
                         } else { // throw in case our result set is null
                             throw new Throwable(ex);
                         }
@@ -178,45 +172,69 @@ public class UserManagementService extends AbstractUserManagementService {
                         final String message = t.getMessage();
                         responseObserver.onError(Status.INVALID_ARGUMENT.augmentDescription(message).asRuntimeException());
                         LOGGER.debug(this.getClass().getName() + ".createUser() " + message);
-
-                        return null;
                     }
-                })
-                /**
-                 * thenAccept in the same thread pool
-                 */
-                .thenAccept(rs -> {
-                    try {
-                        if (rs != null) {
-                            /** Check to see if userInsert was applied.
-                             * userId should be unique, if not, the insert
-                             * should fail
-                             */
-                            if (rs.get().wasApplied()) {
-                                LOGGER.debug("User id is unique, creating user");
-                                eventBus.post(UserCreated.newBuilder()
-                                        .setUserId(request.getUserId())
-                                        .setEmail(email)
-                                        .setFirstName(request.getFirstName())
-                                        .setLastName(request.getLastName())
-                                        .setTimestamp(TypeConverter.instantToTimeStamp(now.toInstant()))
-                                        .build());
-                                responseObserver.onNext(CreateUserResponse.newBuilder().build());
-                                responseObserver.onCompleted();
-
-                            } else {
-                                throw new Throwable("User ID already exists");
-                            }
-
-                            LOGGER.debug("End creating user");
-                        }
-
-                    } catch (Throwable t) {
-                        eventBus.post(new CassandraMutationError(request, t));
-                        responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
-                        LOGGER.error(this.getClass().getName() + ".createUser() " + "Exception creating user : " + mergeStackTrace(t));
-                    }
+                    return rs;
                 });
+
+        /**
+         * No LWT error, we can proceed further
+         * Execute our insert statement in an async
+         * fashion as well and pass the result to the next
+         * line in the chain
+         */
+        CompletableFuture<ResultSet> insertUserFuture = checkEmailFuture.thenCompose(rs -> {
+            final BoundStatement insertUser = createUser_insertUserPrepared.bind()
+                    .setUUID("userid", userIdUUID)
+                    .setString("firstname", firstName)
+                    .setString("lastname", lastName)
+                    .setString("email", email)
+                    .setTimestamp("created_date", now);
+
+            return FutureUtils.buildCompletableFuture(session.executeAsync(insertUser));
+        });
+
+        /**
+         * thenAccept in the same thread pool (not using thenAcceptAsync())
+         */
+        insertUserFuture.thenAccept(rs -> {
+            try {
+                if (rs != null) {
+                    /** Check to see if userInsert was applied.
+                     * userId should be unique, if not, the insert
+                     * should fail
+                     */
+                    if (rs.wasApplied()) {
+                        LOGGER.debug("User id is unique, creating user");
+
+                        /**
+                         * eventbus.post() for UserCreated below is located in the
+                         * SuggestedVideos Service class within the handle() method.
+                         * The UserCreated type triggers the handler and is responsible
+                         * for adding data to our graph recommendation engine.
+                         */
+                        eventBus.post(UserCreated.newBuilder()
+                                .setUserId(userIdUuid)
+                                .setEmail(email)
+                                .setFirstName(firstName)
+                                .setLastName(lastName)
+                                .setTimestamp(TypeConverter.instantToTimeStamp(now.toInstant()))
+                                .build());
+                        responseObserver.onNext(CreateUserResponse.newBuilder().build());
+                        responseObserver.onCompleted();
+
+                        LOGGER.debug("End creating user");
+
+                    } else {
+                        throw new Throwable("User ID already exists");
+                    }
+                }
+
+            } catch (Throwable t) {
+                eventBus.post(new CassandraMutationError(request, t));
+                responseObserver.onError(Status.INTERNAL.withCause(t).asRuntimeException());
+                LOGGER.error(this.getClass().getName() + ".createUser() " + "Exception creating user : " + mergeStackTrace(t));
+            }
+        });
     }
 
     @Override

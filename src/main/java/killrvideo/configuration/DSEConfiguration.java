@@ -6,8 +6,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 
+import com.datastax.driver.dse.graph.GraphProtocol;
 import com.datastax.dse.graph.api.DseGraph;
-import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
+import com.datastax.dse.graph.internal.DseRemoteConnection;
+import killrvideo.graph.KillrVideoTraversalSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -100,6 +102,7 @@ public class DSEConfiguration {
             clusterConfig.withGraphOptions(new GraphOptions()
                     .setGraphName(RECOMMENDATION_GRAPH_NAME)
                     .setReadTimeoutMillis(GRAPH_TIMEOUT_DEFAULT)
+                    .setGraphSubProtocol(GraphProtocol.GRAPHSON_2_0)
             );
 
             DseCluster dseCluster = clusterConfig.build();
@@ -123,8 +126,8 @@ public class DSEConfiguration {
         final MappingManager manager = setMappingManager(dseSession);
         LOGGER.info(String.format("Creating mapping manager %s", manager));
 
-        final GraphTraversalSource g = setGraphTraversalSource(dseSession);
-        LOGGER.info(String.format("Creating graph traversal source %s", g));
+        final KillrVideoTraversalSource killr = setKillrVideoTraversalSource(dseSession);
+        LOGGER.info(String.format("Creating graph traversal killrvideosource %s", killr));
 
         return null;
     }
@@ -135,7 +138,7 @@ public class DSEConfiguration {
     }
 
     @Bean
-    public GraphTraversalSource setGraphTraversalSource(DseSession session) {
-        return DseGraph.traversal(session);
+    public KillrVideoTraversalSource setKillrVideoTraversalSource(DseSession session) {
+        return DseGraph.traversal(session, KillrVideoTraversalSource.class);
     }
 }
