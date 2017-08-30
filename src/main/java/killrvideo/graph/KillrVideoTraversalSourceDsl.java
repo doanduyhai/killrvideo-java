@@ -14,6 +14,11 @@ import static killrvideo.graph.KillrVideoTraversalConstants.*;
 
 /**
  * Traversal Source for our KillrVideo graph DSL (Domain Specific Language)
+ *
+ * Initial DSL credit goes to Stephen Mallette who provided me with a working
+ * KillrVideo DSL example that I used as the basis for the following code.
+ * Be sure to check out his excellent blog post explaining DSL's
+ * here -> https://www.datastax.com/dev/blog/gremlin-dsls-in-java-with-dse-graph
  */
 public class KillrVideoTraversalSourceDsl extends GraphTraversalSource {
 

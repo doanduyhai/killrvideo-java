@@ -5,7 +5,10 @@ import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.dse.DseSession;
-import com.datastax.driver.dse.graph.*;
+import com.datastax.driver.dse.graph.GraphNode;
+import com.datastax.driver.dse.graph.GraphResultSet;
+import com.datastax.driver.dse.graph.GraphStatement;
+import com.datastax.driver.dse.graph.Vertex;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
 import com.datastax.driver.mapping.Result;
@@ -14,47 +17,32 @@ import com.datastax.dse.graph.api.DseGraph;
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.Subscribe;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.protobuf.Timestamp;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 
 import killrvideo.common.CommonTypes.Uuid;
-import killrvideo.configuration.KillrVideoConfiguration;
-import killrvideo.configuration.KillrVideoProperties;
 import killrvideo.entity.Schema;
 import killrvideo.entity.Video;
 import killrvideo.entity.VideoByTag;
 import killrvideo.graph.KillrVideoTraversal;
 import killrvideo.graph.KillrVideoTraversalSource;
-import killrvideo.graph.__;
-import killrvideo.ratings.events.RatingsEvents;
+import killrvideo.ratings.events.RatingsEvents.UserRatedVideo;
 import killrvideo.suggested_videos.SuggestedVideoServiceGrpc.AbstractSuggestedVideoService;
 import killrvideo.suggested_videos.SuggestedVideosService.*;
-import killrvideo.user_management.UserManagementServiceGrpc;
-import killrvideo.user_management.UserManagementServiceGrpc.UserManagementServiceBlockingStub;
-import killrvideo.user_management.UserManagementServiceOuterClass.*;
-import killrvideo.user_management.events.UserManagementEvents;
+import killrvideo.user_management.events.UserManagementEvents.UserCreated;
 import killrvideo.utils.FutureUtils;
 import killrvideo.utils.TypeConverter;
 import killrvideo.validation.KillrVideoInputValidator;
 import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
-import killrvideo.user_management.events.UserManagementEvents.UserCreated;
-import killrvideo.ratings.events.RatingsEvents.UserRatedVideo;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.map.HashedMap;
-import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
-import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
-import java.sql.Time;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -62,9 +50,7 @@ import java.util.concurrent.CompletableFuture;
 import static java.util.stream.Collectors.toMap;
 import static killrvideo.graph.KillrVideoTraversalConstants.VERTEX_USER;
 import static killrvideo.graph.KillrVideoTraversalConstants.VERTEX_VIDEO;
-import static killrvideo.graph.__.rated;
-import static killrvideo.graph.__.taggedWith;
-import static killrvideo.graph.__.uploaded;
+import static killrvideo.graph.__.*;
 
 @Service
 public class SuggestedVideosService extends AbstractSuggestedVideoService {
@@ -91,17 +77,14 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
     @Inject
     KillrVideoInputValidator validator;
 
-    private DseSession session;
     private String videoByTagTableName;
     private PreparedStatement getRelatedVideos_getVideosByTagPrepared;
 
     @PostConstruct
     public void init(){
-        this.session = dseSession;
-
         videoByTagTableName = videoByTagMapper.getTableMetadata().getName();
 
-        getRelatedVideos_getVideosByTagPrepared = session.prepare(
+        getRelatedVideos_getVideosByTagPrepared = dseSession.prepare(
                 QueryBuilder
                         .select().all()
                         .from(Schema.KEYSPACE, videoByTagTableName)
@@ -174,7 +157,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                                  * 2) automagically creating a prepared statement the mapper will use for
                                  * any subsequent calls to this same query.
                                  */
-                                inFlightQueries.add(videoByTagMapper.mapAsync(session.executeAsync(statement)));
+                                inFlightQueries.add(videoByTagMapper.mapAsync(dseSession.executeAsync(statement)));
 
                                 //:TODO Refactor this section to break it up and make it easier to follow/read
                                 /** Every third query, or if this is the last tag, wait on all the query results **/
@@ -241,12 +224,18 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
              * http://docs.datastax.com/en/developer/java-driver-dse/1.4/manual/tinkerpop/#gremlin-domain-specific-languages-dsl)
              * to first traverse our current user and then grab any recommended videos
              * from our recommendation engine.
+             *
+             * Parameters for recommendByUserRating are as follows:
+             * number of recommendations - the number of recommended movies to return
+             * min rating - the minimum rating to allow for
+             * number of ratings to sample - the number of global user ratings to sample (smaller means faster traversal)
+             * local user ratings to sample - the number of local user ratings to limit by
              */
             GraphStatement gStatement = DseGraph.statementFromTraversal(killr.users(userIdString)
-                    .recommendHackathon(100, 4, 500, 10)
+                    .recommendByUserRating(100, 4, 500, 10)
             );
 
-            CompletableFuture<GraphResultSet> future = FutureUtils.buildCompletableFuture(session.executeGraphAsync(gStatement));
+            CompletableFuture<GraphResultSet> future = FutureUtils.buildCompletableFuture(dseSession.executeGraphAsync(gStatement));
 
             future.whenComplete((vertices, ex) -> {
                 if (vertices != null) {
@@ -270,7 +259,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                     responseObserver.onNext(builder.build());
                     responseObserver.onCompleted();
                 } else {
-                    LOGGER.error("Exception in SuggestedVideosService.getSuggestedForUser recommendation traversal: " + ex);
+                    LOGGER.warn("Exception in SuggestedVideosService.getSuggestedForUser recommendByUserRating() recommendation traversal: " + ex);
                 }
             });
 
@@ -323,7 +312,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
          * insert that video into our graph for the recommendation engine
          */
         CompletableFuture<GraphResultSet> videoVertexFuture =
-                FutureUtils.buildCompletableFuture(session.executeGraphAsync(
+                FutureUtils.buildCompletableFuture(dseSession.executeGraphAsync(
                         DseGraph.statementFromTraversal(traversal))
                 );
 
@@ -332,7 +321,8 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                 LOGGER.debug("Added video vertex, uploaded, and taggedWith edges: " + graphResultSet.all());
 
             }  else {
-                LOGGER.debug("Error handling YouTubeVideoAdded for graph: " + ex);
+                //TODO: Potentially add some robustness code here
+                LOGGER.warn("Error handling YouTubeVideoAdded for graph: " + ex);
             }
         });
     }
@@ -361,14 +351,15 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                 ));
 
         CompletableFuture<GraphResultSet> graphResultFuture =
-                FutureUtils.buildCompletableFuture(session.executeGraphAsync(gStatement));
+                FutureUtils.buildCompletableFuture(dseSession.executeGraphAsync(gStatement));
 
         graphResultFuture.whenComplete((graphResultSet, ex) -> {
             if (graphResultSet != null) {
                 LOGGER.debug("Added user vertex: " + graphResultSet.one());
 
             } else {
-                LOGGER.debug("Error creating user vertex: " + ex);
+                //TODO: Potentially add some robustness code here
+                LOGGER.warn("Error creating user vertex: " + ex);
             }
         });
     }
@@ -400,14 +391,15 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                         ));
 
         final CompletableFuture<GraphResultSet> ratingFuture =
-                FutureUtils.buildCompletableFuture(session.executeGraphAsync(DseGraph.statementFromTraversal(traversal)));
+                FutureUtils.buildCompletableFuture(dseSession.executeGraphAsync(DseGraph.statementFromTraversal(traversal)));
 
         ratingFuture.whenComplete((graphResultSet, ex) -> {
             if (graphResultSet != null) {
                 LOGGER.debug("Added rating between user and video: " + graphResultSet.one());
 
             } else {
-                LOGGER.debug("Error Adding rating between user and video: " + ex);
+                //TODO: Potentially add some robustness code here
+                LOGGER.warn("Error Adding rating between user and video: " + ex);
             }
         });
     }

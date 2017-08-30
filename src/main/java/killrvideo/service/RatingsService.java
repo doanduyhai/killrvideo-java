@@ -58,18 +58,15 @@ public class RatingsService extends AbstractRatingsService {
     @Inject
     KillrVideoInputValidator validator;
 
-    private DseSession session;
     private String videoRatingsTableName;
     private PreparedStatement rateVideo_updateRatingPrepared;
 
 
     @PostConstruct
     public void init(){
-        this.session = dseSession;
-
         videoRatingsTableName = videoRatingMapper.getTableMetadata().getName();
 
-        rateVideo_updateRatingPrepared = session.prepare(
+        rateVideo_updateRatingPrepared = dseSession.prepare(
                 QueryBuilder
                         .update(Schema.KEYSPACE, videoRatingsTableName)
                         .with(QueryBuilder.incr("rating_counter"))
@@ -116,7 +113,7 @@ public class RatingsService extends AbstractRatingsService {
          */
         CompletableFuture<Void> rateVideoFuture = CompletableFuture
                 .allOf(
-                        FutureUtils.buildCompletableFuture(session.executeAsync(counterUpdateStatement)),
+                        FutureUtils.buildCompletableFuture(dseSession.executeAsync(counterUpdateStatement)),
                         FutureUtils.buildCompletableFuture(videoRatingByUserMapper
                                 .saveAsync(new VideoRatingByUser(videoId, userId, rating)))
                 )

@@ -63,7 +63,6 @@ public class UserManagementService extends AbstractUserManagementService {
     @Inject
     KillrVideoInputValidator validator;
 
-    private DseSession session;
     private String usersTableName;
     private String userCredentialsTableName;
     private PreparedStatement createUser_checkEmailPrepared;
@@ -72,12 +71,10 @@ public class UserManagementService extends AbstractUserManagementService {
 
     @PostConstruct
     public void init(){
-        this.session = dseSession;
-
         usersTableName = userMapper.getTableMetadata().getName();
         userCredentialsTableName = userCredentialsMapper.getTableMetadata().getName();
 
-        createUser_checkEmailPrepared = session.prepare(
+        createUser_checkEmailPrepared = dseSession.prepare(
                 QueryBuilder
                         .insertInto(Schema.KEYSPACE, userCredentialsTableName)
                         .value("email", QueryBuilder.bindMarker())
@@ -86,7 +83,7 @@ public class UserManagementService extends AbstractUserManagementService {
                         .ifNotExists() // use lightweight transaction
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        createUser_insertUserPrepared = session.prepare(
+        createUser_insertUserPrepared = dseSession.prepare(
                 QueryBuilder
                         .insertInto(Schema.KEYSPACE, usersTableName)
                         .value("userid", QueryBuilder.bindMarker())
@@ -97,7 +94,7 @@ public class UserManagementService extends AbstractUserManagementService {
                         .ifNotExists() // use lightweight transaction
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        getUserProfile_getUsersPrepared = session.prepare(
+        getUserProfile_getUsersPrepared = dseSession.prepare(
                 QueryBuilder
                         .select()
                         .all()
@@ -143,7 +140,7 @@ public class UserManagementService extends AbstractUserManagementService {
          * the user into the users table.  Both cases use lightweight transactions
          * to ensure we are not duplicating already existing users within the database.
          */
-        CompletableFuture<ResultSet> checkEmailFuture = FutureUtils.buildCompletableFuture(session.executeAsync(checkEmailQuery))
+        CompletableFuture<ResultSet> checkEmailFuture = FutureUtils.buildCompletableFuture(dseSession.executeAsync(checkEmailQuery))
                 /**
                  * I use the *Async() version of .handle below because I am
                  * chaining multiple async futures.  In testing we found that chains like
@@ -190,7 +187,7 @@ public class UserManagementService extends AbstractUserManagementService {
                     .setString("email", email)
                     .setTimestamp("created_date", now);
 
-            return FutureUtils.buildCompletableFuture(session.executeAsync(insertUser));
+            return FutureUtils.buildCompletableFuture(dseSession.executeAsync(insertUser));
         });
 
         /**
@@ -306,7 +303,7 @@ public class UserManagementService extends AbstractUserManagementService {
         BoundStatement getUsersQuery = getUserProfile_getUsersPrepared.bind()
                 .setList(0, Arrays.asList(userIds), UUID.class);
 
-        FutureUtils.buildCompletableFuture(userMapper.mapAsync(session.executeAsync(getUsersQuery)))
+        FutureUtils.buildCompletableFuture(userMapper.mapAsync(dseSession.executeAsync(getUsersQuery)))
                 .handle((users, ex) -> {
                     if (users != null) {
                         users.forEach(user -> builder.addProfiles(user.toUserProfile()));

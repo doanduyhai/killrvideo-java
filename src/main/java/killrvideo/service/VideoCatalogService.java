@@ -20,7 +20,6 @@ import killrvideo.entity.Schema;
 import killrvideo.entity.UserVideos;
 import killrvideo.entity.Video;
 import killrvideo.events.CassandraMutationError;
-import killrvideo.graph.KillrVideoTraversalSource;
 import killrvideo.utils.FutureUtils;
 import killrvideo.utils.TypeConverter;
 import killrvideo.validation.KillrVideoInputValidator;
@@ -89,7 +88,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     @Inject
     KillrVideoInputValidator validator;
 
-    private DseSession session;
     private String videosTableName;
     private String latestVideosTableName;
     private String userVideosTableName;
@@ -103,8 +101,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
     @PostConstruct
     public void init(){
-        this.session = dseSession;
-
         /**
          * Set the following up in PostConstruct because 1) we have to
          * wait until after dependency injection for these to work,
@@ -122,7 +118,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         userVideosTableName = userVideosMapper.getTableMetadata().getName();
 
         // Prepared statements for getLatestVideoPreviews()
-        latestVideoPreview_startingPointPrepared = session.prepare(
+        latestVideoPreview_startingPointPrepared = dseSession.prepare(
                 "" +
                         "SELECT * " +
                         "FROM " + Schema.KEYSPACE + "." + latestVideosTableName + " " +
@@ -130,7 +126,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         "AND (added_date, videoid) <= (:ad, :vid)"
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        latestVideoPreview_noStartingPointPrepared = session.prepare(
+        latestVideoPreview_noStartingPointPrepared = dseSession.prepare(
                 "" +
                         "SELECT * " +
                         "FROM " + Schema.KEYSPACE + "." + latestVideosTableName + " " +
@@ -138,7 +134,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         // Prepared statements for getUserVideoPreviews()
-        userVideoPreview_startingPointPrepared = session.prepare(
+        userVideoPreview_startingPointPrepared = dseSession.prepare(
                 "" +
                         "SELECT * " +
                         "FROM " + Schema.KEYSPACE + "." + userVideosTableName + " " +
@@ -146,7 +142,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         "AND (added_date, videoid) <= (:ad, :vid)"
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        userVideoPreview_noStartingPointPrepared = session.prepare(
+        userVideoPreview_noStartingPointPrepared = dseSession.prepare(
                 "" +
                         "SELECT * " +
                         "FROM " + Schema.KEYSPACE + "." + userVideosTableName + " " +
@@ -155,7 +151,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
 
 
         // Prepared statements for submitYouTubeVideo()
-        submitYouTubeVideo_insertVideo = session.prepare(
+        submitYouTubeVideo_insertVideo = dseSession.prepare(
                 QueryBuilder
                         .insertInto(Schema.KEYSPACE, videosTableName)
                         .value("videoId", QueryBuilder.bindMarker())
@@ -169,7 +165,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         .value("added_date", QueryBuilder.bindMarker())
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        submitYouTubeVideo_insertUserVideo = session.prepare(
+        submitYouTubeVideo_insertUserVideo = dseSession.prepare(
                 QueryBuilder
                         .insertInto(Schema.KEYSPACE, userVideosTableName)
                         .value("userid", QueryBuilder.bindMarker())
@@ -179,7 +175,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         .value("added_date", QueryBuilder.bindMarker())
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        submitYouTubeVideo_insertLatestVideo = session.prepare(
+        submitYouTubeVideo_insertLatestVideo = dseSession.prepare(
                 QueryBuilder
                         .insertInto(Schema.KEYSPACE, latestVideosTableName)
                         .value("yyyymmdd", QueryBuilder.bindMarker())
@@ -247,7 +243,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         batchStatement.add(insertLatestVideo);
         batchStatement.setDefaultTimestamp(now.getTime());
 
-        CompletableFuture<ResultSet> insertUserFuture = FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
+        CompletableFuture<ResultSet> insertUserFuture = FutureUtils.buildCompletableFuture(dseSession.executeAsync(batchStatement))
                 .handle((rs, ex) -> {
                     if (rs != null) {
                         /**
@@ -514,7 +510,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                 );
 
                 final CompletableFuture<Result<LatestVideos>> videosFuture = FutureUtils
-                        .buildCompletableFuture(latestVideosMapper.mapAsync(session.executeAsync(bound)))
+                        .buildCompletableFuture(latestVideosMapper.mapAsync(dseSession.executeAsync(bound)))
                         .handle((latestVideos, ex) -> {
                             if (latestVideos != null) {
                                 /**
@@ -648,7 +644,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
          * I get back results that are already mapped to UserVideos entities.
          * This is a really nice convenience the mapper provides.
          */
-        FutureUtils.buildCompletableFuture(userVideosMapper.mapAsync(session.executeAsync(bound)))
+        FutureUtils.buildCompletableFuture(userVideosMapper.mapAsync(dseSession.executeAsync(bound)))
                 .handle((userVideos, ex) -> {
                     try {
                         if (userVideos != null) {

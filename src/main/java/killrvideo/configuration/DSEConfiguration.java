@@ -8,7 +8,6 @@ import javax.inject.Inject;
 
 import com.datastax.driver.dse.graph.GraphProtocol;
 import com.datastax.dse.graph.api.DseGraph;
-import com.datastax.dse.graph.internal.DseRemoteConnection;
 import killrvideo.graph.KillrVideoTraversalSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -123,22 +122,22 @@ public class DSEConfiguration {
         // Initialize DSE
         final DseSession dseSession = initializeDSE();
 
-        final MappingManager manager = setMappingManager(dseSession);
+        final MappingManager manager = getMappingManager(dseSession);
         LOGGER.info(String.format("Creating mapping manager %s", manager));
 
-        final KillrVideoTraversalSource killr = setKillrVideoTraversalSource(dseSession);
+        final KillrVideoTraversalSource killr = getKillrVideoTraversalSource(dseSession);
         LOGGER.info(String.format("Creating graph traversal killrvideosource %s", killr));
 
         return null;
     }
 
     @Bean
-    public MappingManager setMappingManager(DseSession session) {
+    public MappingManager getMappingManager(DseSession session) {
         return new MappingManager(session);
     }
 
     @Bean
-    public KillrVideoTraversalSource setKillrVideoTraversalSource(DseSession session) {
+    public KillrVideoTraversalSource getKillrVideoTraversalSource(DseSession session) {
         return DseGraph.traversal(session, KillrVideoTraversalSource.class);
     }
 }

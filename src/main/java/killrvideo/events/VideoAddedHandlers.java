@@ -40,7 +40,6 @@ public class VideoAddedHandlers {
     @Inject
     DseSession dseSession;
 
-    private DseSession session;
     private String videosByTagTableName;
     private String tagsByLetterTableName;
     private PreparedStatement videosByTagPrepared;
@@ -48,19 +47,17 @@ public class VideoAddedHandlers {
 
     @PostConstruct
     public void init() {
-        this.session = dseSession;
-
         videosByTagTableName = videosByTagMapper.getTableMetadata().getName();
         tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
 
         // Prepared statements for handle()
-        videosByTagPrepared = session.prepare(
+        videosByTagPrepared = dseSession.prepare(
                 "INSERT INTO " + Schema.KEYSPACE + "." + videosByTagTableName + " " +
                         "(tag, videoid, added_date, userid, name, preview_image_location, tagged_date) " +
                         "VALUES (?, ?, ?, ?, ?, ?, ?)"
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        tagsByLetterPrepared = session.prepare(
+        tagsByLetterPrepared = dseSession.prepare(
                 "INSERT INTO " + Schema.KEYSPACE + "." + tagsByLetterTableName + " " +
                         "(first_letter, tag) VALUES (?, ?)"
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
@@ -107,7 +104,7 @@ public class VideoAddedHandlers {
 
         batchStatement.setDefaultTimestamp(taggedDate.getTime());
 
-        CompletableFuture<ResultSet> batchFuture = FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
+        CompletableFuture<ResultSet> batchFuture = FutureUtils.buildCompletableFuture(dseSession.executeAsync(batchStatement))
                 .handle((rs, ex) -> {
                     if (rs != null) {
                         LOGGER.debug("End handling YouTubeVideoAdded");
