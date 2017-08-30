@@ -292,9 +292,9 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
                         .group().by().by(__.sack().sum())
                         // now that we have that big map of [video: score], lets order it
                         .order(Scope.local).by(values, decr).limit(Scope.local, recommendations).select(keys).unfold()
-                        // Ok, we have our video vertices, now lets tag on the user vertex of the user who uploaded each video
+                        // Ok, we have our video vertices, now lets tag on the user vertex of the user who uploaded each video using project()
                         .project(VERTEX_VIDEO, VERTEX_USER)
-                        .by()
-                        .by(__.in(EDGE_UPLOADED));
+                            .by()
+                            .by(__.in(EDGE_UPLOADED));
     }
 }
