@@ -54,9 +54,6 @@ public class GrpcServer {
     StatisticsService statisticsService;
 
     @Inject
-    SuggestedVideosService suggestedVideosService;
-
-    @Inject
     UploadsService uploadsService;
 
     @Inject
@@ -70,6 +67,9 @@ public class GrpcServer {
 
     @Inject
     VideoAddedHandlers videoAddedHandlers;
+
+    @Inject
+    SuggestedVideosService suggestedVideosService;
 
     @Inject
     CassandraMutationErrorHandler cassandraMutationErrorHandler;
@@ -112,13 +112,12 @@ public class GrpcServer {
         LOGGER.info("Starting Grpc Server on port " + port);
 
         eventBus.register(videoAddedHandlers);
+        eventBus.register(suggestedVideosService);
         eventBus.register(cassandraMutationErrorHandler);
-
 
         registerServicesToEtcd(Lists.newArrayList(commentService, ratingService, statisticsService,
                 suggestedVideoService, uploadsService, userManagementService, videoCatalogService,
                 searchService));
-
 
         /**
          * Declare a shutdown hook otherwise the JVM
@@ -138,6 +137,7 @@ public class GrpcServer {
     @PreDestroy
     public void stop() {
         eventBus.unregister(videoAddedHandlers);
+        eventBus.unregister(suggestedVideosService);
         eventBus.unregister(cassandraMutationErrorHandler);
         server.shutdown();
     }

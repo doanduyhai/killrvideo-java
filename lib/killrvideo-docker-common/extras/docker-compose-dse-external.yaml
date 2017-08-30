@@ -3,7 +3,7 @@ version: '2'
 services:
   # DataStax Enterprise with KillrVideo schema and search config
   dse:
-    image: killrvideo/killrvideo-dse-external:1.0.6
+    image: killrvideo/killrvideo-dse-external:3.0.0
     cap_add:
     - IPC_LOCK
     ulimits:

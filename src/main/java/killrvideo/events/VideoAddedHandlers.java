@@ -1,27 +1,27 @@
 package killrvideo.events;
 
-import java.time.Instant;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.UUID;
-import javax.annotation.PostConstruct;
-import javax.inject.Inject;
-
 import com.datastax.driver.core.*;
+import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
-import killrvideo.entity.Schema;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.Subscribe;
-
+import killrvideo.entity.Schema;
 import killrvideo.entity.TagsByLetter;
 import killrvideo.entity.VideoByTag;
 import killrvideo.utils.FutureUtils;
 import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import javax.annotation.PostConstruct;
+import javax.inject.Inject;
+import java.time.Instant;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 public class VideoAddedHandlers {
@@ -37,7 +37,9 @@ public class VideoAddedHandlers {
     @Inject
     MappingManager manager;
 
-    private Session session;
+    @Inject
+    DseSession dseSession;
+
     private String videosByTagTableName;
     private String tagsByLetterTableName;
     private PreparedStatement videosByTagPrepared;
@@ -45,19 +47,17 @@ public class VideoAddedHandlers {
 
     @PostConstruct
     public void init() {
-        this.session = manager.getSession();
-
         videosByTagTableName = videosByTagMapper.getTableMetadata().getName();
         tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
 
         // Prepared statements for handle()
-        videosByTagPrepared = session.prepare(
+        videosByTagPrepared = dseSession.prepare(
                 "INSERT INTO " + Schema.KEYSPACE + "." + videosByTagTableName + " " +
                         "(tag, videoid, added_date, userid, name, preview_image_location, tagged_date) " +
                         "VALUES (?, ?, ?, ?, ?, ?, ?)"
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        tagsByLetterPrepared = session.prepare(
+        tagsByLetterPrepared = dseSession.prepare(
                 "INSERT INTO " + Schema.KEYSPACE + "." + tagsByLetterTableName + " " +
                         "(first_letter, tag) VALUES (?, ?)"
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
@@ -72,8 +72,9 @@ public class VideoAddedHandlers {
      */
     @Subscribe
     public void handle(YouTubeVideoAdded youTubeVideoAdded) {
+        final String className = this.getClass().getName();
 
-        LOGGER.debug("Start handling YouTubeVideoAdded");
+        LOGGER.debug("Start handling YouTubeVideoAdded for " + className);
 
         final UUID userId = UUID.fromString(youTubeVideoAdded.getUserId().getValue());
         final UUID videoId = UUID.fromString(youTubeVideoAdded.getVideoId().getValue());
@@ -94,7 +95,7 @@ public class VideoAddedHandlers {
             );
 
             BoundStatement tagsByLetterBound = tagsByLetterPrepared.bind(
-                    tag.substring(0,1), tag
+                    tag.substring(0, 1), tag
             );
 
             batchStatement.add(videosByTagBound);
@@ -103,16 +104,16 @@ public class VideoAddedHandlers {
 
         batchStatement.setDefaultTimestamp(taggedDate.getTime());
 
-        FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
-            .handle((rs, ex) -> {
-                if (rs != null) {
-                    LOGGER.debug("End handling YouTubeVideoAdded");
-                }
-                if (ex != null) {
-                    //:TODO We should probably put in some logic that will repeat the transaction if it fails for some reason
+        CompletableFuture<ResultSet> batchFuture = FutureUtils.buildCompletableFuture(dseSession.executeAsync(batchStatement))
+                .handle((rs, ex) -> {
+                    if (rs != null) {
+                        LOGGER.debug("End handling YouTubeVideoAdded");
+                    }
+                    if (ex != null) {
+                        //:TODO We should probably put in some logic that will repeat the transaction if it fails for some reason
 
-                }
-                return rs;
-            });
+                    }
+                    return rs;
+                });
     }
 }
