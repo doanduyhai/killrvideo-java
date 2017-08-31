@@ -8,6 +8,7 @@ import javax.inject.Inject;
 
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
 import killrvideo.entity.Schema;
@@ -45,7 +46,9 @@ public class SearchService extends AbstractSearchService {
     @Inject
     KillrVideoInputValidator validator;
 
-    private Session session;
+    @Inject
+    DseSession dseSession;
+
     private String tagsByLetterTableName;
     private String videosByTagTableName;
     private PreparedStatement searchVideos_getVideosByTagPrepared;
@@ -53,12 +56,10 @@ public class SearchService extends AbstractSearchService {
 
     @PostConstruct
     public void init() {
-        this.session = manager.getSession();
-
         tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
         videosByTagTableName = videosByTagMapper.getTableMetadata().getName();
 
-        searchVideos_getVideosByTagPrepared = session.prepare(
+        searchVideos_getVideosByTagPrepared = dseSession.prepare(
                 QueryBuilder
                         .select()
                         .all()
@@ -66,7 +67,7 @@ public class SearchService extends AbstractSearchService {
                         .where(QueryBuilder.eq("tag", QueryBuilder.bindMarker()))
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        getQuerySuggestions_getTagsPrepared = session.prepare(
+        getQuerySuggestions_getTagsPrepared = dseSession.prepare(
                 QueryBuilder
                         .select()
                         .from(Schema.KEYSPACE, tagsByLetterTableName)
@@ -95,7 +96,7 @@ public class SearchService extends AbstractSearchService {
 
         pagingState.ifPresent( x -> statement.setPagingState(PagingState.fromString(x)));
 
-        FutureUtils.buildCompletableFuture(videosByTagMapper.mapAsync(session.executeAsync(statement)))
+        FutureUtils.buildCompletableFuture(videosByTagMapper.mapAsync(dseSession.executeAsync(statement)))
                 .handle((videos, ex) -> {
                     if (videos != null) {
                         final SearchVideosResponse.Builder builder = SearchVideosResponse.newBuilder();
@@ -142,7 +143,7 @@ public class SearchService extends AbstractSearchService {
 
         statement.setFetchSize(request.getPageSize());
 
-        FutureUtils.buildCompletableFuture(tagsByLetterMapper.mapAsync(session.executeAsync(statement)))
+        FutureUtils.buildCompletableFuture(tagsByLetterMapper.mapAsync(dseSession.executeAsync(statement)))
                 .handle((tags, ex) -> {
                     if (tags != null) {
                         final GetQuerySuggestionsResponse.Builder builder = GetQuerySuggestionsResponse.newBuilder();

@@ -9,8 +9,8 @@ import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
 import com.datastax.driver.core.*;
-import com.datastax.driver.core.querybuilder.BuiltStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
 
@@ -37,7 +37,6 @@ import killrvideo.utils.TypeConverter;
 import killrvideo.validation.KillrVideoInputValidator;
 import killrvideo.utils.FutureUtils;
 
-
 @Service
 public class CommentService extends AbstractCommentsService {
 
@@ -58,7 +57,9 @@ public class CommentService extends AbstractCommentsService {
     @Inject
     KillrVideoInputValidator validator;
 
-    Session session;
+    @Inject
+    DseSession dseSession;
+
     private String commentsByUserTableName;
     private String commentsByVideoTableName;
     private PreparedStatement commentsByUserPrepared;
@@ -70,8 +71,6 @@ public class CommentService extends AbstractCommentsService {
 
     @PostConstruct
     public void init(){
-        this.session = manager.getSession();
-
         /**
          * Set the following up in PostConstruct because 1) we have to
          * wait until after dependency injection for these to work,
@@ -88,13 +87,13 @@ public class CommentService extends AbstractCommentsService {
         commentsByVideoTableName = commentsByVideoMapper.getTableMetadata().getName();
 
         // Prepared statements for commentOnVideo()
-        commentsByUserPrepared = session.prepare(
+        commentsByUserPrepared = dseSession.prepare(
                 "INSERT INTO " + Schema.KEYSPACE + "." + commentsByUserTableName + " " +
                         "(userid, commentid, comment, videoid) " +
                         "VALUES (?, ?, ?, ?)"
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        commentsByVideoPrepared = session.prepare(
+        commentsByVideoPrepared = dseSession.prepare(
                 "INSERT INTO " + Schema.KEYSPACE + "." + commentsByVideoTableName + " " +
                         "(videoid, commentid, comment, userid) " +
                         "VALUES (?, ?, ?, ?)"
@@ -111,7 +110,7 @@ public class CommentService extends AbstractCommentsService {
          * So, I essentially have 2 ways to get the timestamp out of my timeUUID column
          * depending on the type of query I am executing.
          */
-        getUserComments_noStartingPointPrepared = session.prepare(
+        getUserComments_noStartingPointPrepared = dseSession.prepare(
                 QueryBuilder
                         .select()
                         .column("userid")
@@ -123,7 +122,7 @@ public class CommentService extends AbstractCommentsService {
                         .where(QueryBuilder.eq("userid", QueryBuilder.bindMarker()))
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        getUserComments_startingPointPrepared = session.prepare(
+        getUserComments_startingPointPrepared = dseSession.prepare(
                 QueryBuilder
                         .select()
                         .column("userid")
@@ -137,7 +136,7 @@ public class CommentService extends AbstractCommentsService {
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         // Prepared statements for getVideoComments()
-        getVideoComments_noStartingPointPrepared = session.prepare(
+        getVideoComments_noStartingPointPrepared = dseSession.prepare(
                 QueryBuilder
                     .select()
                     .column("videoid")
@@ -149,7 +148,7 @@ public class CommentService extends AbstractCommentsService {
                     .where(QueryBuilder.eq("videoid", QueryBuilder.bindMarker()))
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
-        getVideoComments_startingPointPrepared = session.prepare(
+        getVideoComments_startingPointPrepared = dseSession.prepare(
                 QueryBuilder
                         .select()
                         .column("videoid")
@@ -197,7 +196,7 @@ public class CommentService extends AbstractCommentsService {
         batchStatement.add(bs2);
         batchStatement.setDefaultTimestamp(now.getTime());
 
-        FutureUtils.buildCompletableFuture(session.executeAsync(batchStatement))
+        FutureUtils.buildCompletableFuture(dseSession.executeAsync(batchStatement))
             .handle((rs, ex) -> {
                 if(rs != null) {
                     eventBus.post(UserCommentedOnVideo.newBuilder()
@@ -264,7 +263,7 @@ public class CommentService extends AbstractCommentsService {
 
         pagingState.ifPresent( x -> statement.setPagingState(PagingState.fromString(x)));
 
-        FutureUtils.buildCompletableFuture(session.executeAsync(statement))
+        FutureUtils.buildCompletableFuture(dseSession.executeAsync(statement))
                 .handle((commentResult, ex) -> {
                     try {
                         if (commentResult != null) {
@@ -350,7 +349,7 @@ public class CommentService extends AbstractCommentsService {
 
         pagingState.ifPresent( x -> statement.setPagingState(PagingState.fromString(x)));
 
-        FutureUtils.buildCompletableFuture(session.executeAsync(statement))
+        FutureUtils.buildCompletableFuture(dseSession.executeAsync(statement))
                 .handle((commentResult, ex) -> {
                     try {
                         if (commentResult != null) {

@@ -1,35 +1,39 @@
 package killrvideo.service;
 
-
-import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
-
-import java.time.Instant;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import javax.annotation.PostConstruct;
-import javax.inject.Inject;
-
-import com.datastax.driver.core.*;
+import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
-import killrvideo.entity.*;
-import killrvideo.utils.FutureUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
+import com.datastax.driver.dse.DseSession;
+import com.datastax.driver.mapping.Mapper;
+import com.datastax.driver.mapping.MappingManager;
 
 import com.google.common.eventbus.EventBus;
-
-import com.datastax.driver.mapping.MappingManager;
-import com.datastax.driver.mapping.Mapper;
-
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+
+import killrvideo.entity.Schema;
+import killrvideo.entity.VideoRating;
+import killrvideo.entity.VideoRatingByUser;
 import killrvideo.events.CassandraMutationError;
 import killrvideo.ratings.RatingsServiceGrpc.AbstractRatingsService;
 import killrvideo.ratings.RatingsServiceOuterClass.*;
 import killrvideo.ratings.events.RatingsEvents.UserRatedVideo;
+import killrvideo.utils.FutureUtils;
 import killrvideo.utils.TypeConverter;
 import killrvideo.validation.KillrVideoInputValidator;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.PostConstruct;
+import javax.inject.Inject;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 @Service
 public class RatingsService extends AbstractRatingsService {
@@ -46,23 +50,23 @@ public class RatingsService extends AbstractRatingsService {
     Mapper<VideoRatingByUser> videoRatingByUserMapper;
 
     @Inject
+    DseSession dseSession;
+
+    @Inject
     EventBus eventBus;
 
     @Inject
     KillrVideoInputValidator validator;
 
-    private Session session;
     private String videoRatingsTableName;
     private PreparedStatement rateVideo_updateRatingPrepared;
 
 
     @PostConstruct
     public void init(){
-        this.session = manager.getSession();
-
         videoRatingsTableName = videoRatingMapper.getTableMetadata().getName();
 
-        rateVideo_updateRatingPrepared = session.prepare(
+        rateVideo_updateRatingPrepared = dseSession.prepare(
                 QueryBuilder
                         .update(Schema.KEYSPACE, videoRatingsTableName)
                         .with(QueryBuilder.incr("rating_counter"))
@@ -107,14 +111,18 @@ public class RatingsService extends AbstractRatingsService {
          * prepared, the first one I did manually in a more traditional sense and in the second one the
          * mapper will prepare the statement for you automagically.
          */
-        CompletableFuture
+        CompletableFuture<Void> rateVideoFuture = CompletableFuture
                 .allOf(
-                        FutureUtils.buildCompletableFuture(session.executeAsync(counterUpdateStatement)),
+                        FutureUtils.buildCompletableFuture(dseSession.executeAsync(counterUpdateStatement)),
                         FutureUtils.buildCompletableFuture(videoRatingByUserMapper
                                 .saveAsync(new VideoRatingByUser(videoId, userId, rating)))
                 )
                 .handle((rs, ex) -> {
                     if (ex == null) {
+                        /**
+                         * This eventBus.post() call will make its way to the SuggestedVideoService
+                         * class to handle adding data to our graph recommendation engine
+                         */
                         eventBus.post(UserRatedVideo.newBuilder()
                                 .setVideoId(request.getVideoId())
                                 .setUserId(request.getUserId())

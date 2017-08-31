@@ -14,8 +14,8 @@ import javax.inject.Inject;
 import com.datastax.driver.core.BoundStatement;
 import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.PreparedStatement;
-import com.datastax.driver.core.Session;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.MappingManager;
 import killrvideo.entity.Schema;
@@ -52,17 +52,17 @@ public class StatisticsService extends AbstractStatisticsService {
     @Inject
     KillrVideoInputValidator validator;
 
-    Session session;
+    @Inject
+    DseSession dseSession;
+
     private String videoPlaybackStatsTableName;
     private PreparedStatement recordPlaybackStarted_incrStatsPrepared;
 
     @PostConstruct
     public void init(){
-        this.session = manager.getSession();
-
         videoPlaybackStatsTableName = videoPlaybackStatsMapper.getTableMetadata().getName();
 
-        recordPlaybackStarted_incrStatsPrepared = session.prepare(
+        recordPlaybackStarted_incrStatsPrepared = dseSession.prepare(
                 QueryBuilder
                         .update(Schema.KEYSPACE, videoPlaybackStatsTableName)
                         .with(QueryBuilder.incr("views")) //use incr() call to increment my counter field https://docs.datastax.com/en/developer/java-driver/3.2/faq/#how-do-i-increment-counters-with-query-builder
@@ -90,7 +90,7 @@ public class StatisticsService extends AbstractStatisticsService {
         BoundStatement bound = recordPlaybackStarted_incrStatsPrepared.bind()
                 .setUUID("videoid", videoId);
 
-        FutureUtils.buildCompletableFuture(session.executeAsync(bound))
+        FutureUtils.buildCompletableFuture(dseSession.executeAsync(bound))
                 .handle((rs, ex) -> {
                     if (rs != null) {
                         responseObserver.onNext(RecordPlaybackStartedResponse.newBuilder().build());
