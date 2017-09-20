@@ -8,6 +8,7 @@ import com.google.protobuf.Timestamp;
 
 import killrvideo.common.CommonTypes.TimeUuid;
 import killrvideo.common.CommonTypes.Uuid;
+import killrvideo.graph.KillrVideoTraversal;
 
 public class TypeConverter {
 
@@ -35,5 +36,15 @@ public class TypeConverter {
         return Uuid.newBuilder()
                 .setValue(uuid.toString())
                 .build();
+    }
+
+    /**
+     * This method is useful when debugging as an easy way to get a traversal
+     * string to use in gremlin or DSE Studio from bytecode.
+     * @param traversal
+     * @return
+     */
+    public static String bytecodeToTraversalString(KillrVideoTraversal traversal) {
+        return org.apache.tinkerpop.gremlin.groovy.jsr223.GroovyTranslator.of("g").translate(traversal.getBytecode());
     }
 }
