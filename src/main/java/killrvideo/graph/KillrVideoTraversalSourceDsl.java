@@ -118,6 +118,7 @@ public class KillrVideoTraversalSourceDsl extends GraphTraversalSource {
      * @param added_date
      * @return
      */
+    //:TODO Possibly update added_date to use epoch long per Seb's comment
     public GraphTraversal<Vertex, Vertex> user(UUID userId, String email, Date added_date) {
         if (null == userId)
             throw new IllegalArgumentException("The userId must not be null");

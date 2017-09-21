@@ -47,14 +47,8 @@ import static org.apache.tinkerpop.gremlin.structure.Column.values;
 public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E> {
 
     /**
-     * Traverses from a "video" to a "rated" edge.
-     */
-    public default GraphTraversal<S, Edge> ratings() {
-        return inE(EDGE_RATED);
-    }
-
-    /**
      * Calls {@link #rated(int, int)} with both arguments as zero.
+     * ASSUMES incoming traversal from User vertex
      */
     public default GraphTraversal<S, Vertex> rated() {
         return rated(0,0);
@@ -63,13 +57,14 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
     /**
      * Traverses from a "user" to a "video" over the "rated" edge, filtering those edges as specified. If both arguments
      * are zero then there is no rating filter.
+     * ASSUMES incoming traversal from User vertex
      *
      * @param min minimum rating to consider
      * @param max maximum rating to consider
      */
     public default GraphTraversal<S, Vertex> rated(int min, int max) {
-        if (min < 0 || max > 5) throw new IllegalArgumentException("min must be a value between 0 and 5");
-        if (max < 0 || max > 5) throw new IllegalArgumentException("min must be a value between 0 and 5");
+        if (min < 0 || max > 5) throw new IllegalArgumentException("min and max values must be between 0 and 5");
+        if (max < 0 || max > 5) throw new IllegalArgumentException("min and max values must be between 0 and 5");
         if (min != 0 && max != 0 && min > max) throw new IllegalArgumentException("min cannot be greater than max");
 
         if (min == 0 && max == 0)
@@ -84,6 +79,8 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
 
     /**
      * Creates a "rated" edge with "rating" property from a "user" to a "video"
+     * ASSUMES incoming traversal from User vertex
+     *
      * @param userId
      * @param rating
      * @return
@@ -110,14 +107,17 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
     }
 
     /**
-     * Calls {@link #rated(int, int)} with both arguments as zero.
+     * Calls {@link #rated()} with no arguments.  This is equal to rated(0,0).
+     * This method is here for readability in the DSL.
+     * ASSUMES incoming traversal from User vertex
      */
     public default GraphTraversal<S, Vertex> watched() {
-        return out(EDGE_RATED);
+        return rated();
     }
 
     /**
      * Traverses from a "video" to a "user" over the "uploaded" edge.
+     * ASSUMES incoming traversal from Video vertex
      */
     public default GraphTraversal<S, Vertex> uploaders() {
         return in(EDGE_UPLOADED).hasLabel(VERTEX_USER);
@@ -126,6 +126,7 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
     /**
      * Provides a traversal that filters on one user without attempting
      * to create the user record on a failure to find it
+     *
      * @param userId
      * @return
      */
@@ -134,34 +135,9 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
     }
 
     /**
-     * Gets or creates a "user".
-     * <p/>
-     * This step first checks for existence of a user given their userId. If it exists then the user is
-     * returned.  If not, the user is created.  This does not allow for updates, only an initial insert.
-     * The app itself does not allow for updates to existing user records so I kept to the same design here.
-     * @param userId
-     * @param email
-     * @param added_date
-     * @return
-     */
-    public default GraphTraversal<S, Vertex> user(UUID userId, String email, Date added_date) {
-        if (null == userId)
-            throw new IllegalArgumentException("The userId must not be null");
-        if (null == email || email.isEmpty())
-            throw new IllegalArgumentException("The email of the user must not be null or empty");
-        if (null == added_date)
-            throw new IllegalArgumentException("The added_date must not be null");
-
-        return coalesce(
-                __.V().has(VERTEX_USER, KEY_USER_ID, userId),
-                __.addV(VERTEX_USER)
-                    .property(KEY_USER_ID, userId)
-                    .property(KEY_ADDED_DATE, added_date)
-                    .property(KEY_EMAIL, email));
-    }
-
-    /**
      * Creates an "uploaded" edge from a "user" to a "video"
+     * ASSUMES incoming traversal from Video vertex
+     *
      * @param userId
      * @return
      */
@@ -183,6 +159,7 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
 
     /**
      * Traverses from a "video" to a "tag" over the "taggedWith" edge.
+     * ASSUMES incoming traversal from Video vertex
      */
     public default GraphTraversal<S, Vertex> taggers() {
         return out(EDGE_TAGGED_WITH).hasLabel(VERTEX_TAG);
@@ -191,6 +168,8 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
     /**
      * Checks for the existence of a tag and returns it if it exists.  If not,
      * it creates a new tag vertex.
+     * ASSUMES incoming traversal from Video vertex
+     *
      * @param name
      * @param tagged_date
      * @return
@@ -210,6 +189,8 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
 
     /**
      * Creates a "taggedWith" edge from a "video" to a "tag"
+     * ASSUMES incoming traversal from Video vertex
+     *
      * @param name
      * @param tagged_date
      * @return
@@ -233,17 +214,11 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
     }
 
     /**
-     * This step is an alias for the {@code sideEffect()} step. As an alias, it makes certain aspects of the DSL more
-     * readable.
-     */
-    public default GraphTraversal<S,?> ensure(Traversal<?,?> mutationTraversal) {
-        return sideEffect(mutationTraversal);
-    }
-
-    /**
      * Recommendation engine - User rating engine
      * Using the videos I really like (rating 4-5), find other users who also really like the same videos, and grab
      * videos they really like while excluding any videos I have watched.
+     *
+     * ASSUMES incoming traversal from User vertex
      *
      * @param recommendations the number of recommended movies to return
      * @param minRating the minimum rating to allow for
@@ -263,7 +238,7 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
         if (localUserRatingsToSample <= 0) throw new IllegalArgumentException("localUserRatingsToSample must be greater than zero");
 
         /**
-         * Notice that I call killr.users() using our DSL and then ".as()" to set the result as "currentUser".
+         * Notice that I call killr.users() (<-- defined in KillrVideoTraversalSourceDsl) using our DSL and then ".as()" to set the result as "currentUser".
          * This comes into play within the traversal right below it as a way to keep the whole
          * traversal a "one-liner" that prevents us from having to store multiple traversals in separate
          * variables or something along those lines.
