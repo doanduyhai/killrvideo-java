@@ -294,12 +294,12 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
 
         /**
          * Below we are using our KillrVideoTraversal DSL (Domain Specific Language)
-         * to create our video vertex, then within sideEffect we connect up the user responsible
+         * to create our video vertex, then within add() we connect up the user responsible
          * for uploading the video with the "uploaded" edge, and then follow up with
          * any and all tags using the "taggedWith" edge.  Since we may have multiple
          * tags make sure to loop through and get them all in there.
          *
-         * Also note the use of sideEffect().  Take a look at Stephen's blog here
+         * Also note the use of add().  Take a look at Stephen's blog here
          * -> https://www.datastax.com/dev/blog/gremlin-dsls-in-java-with-dse-graph for more information.
          * This essentially allows us to chain multiple commands (uploaded and (n * taggedWith) in this case)
          * while "preserving" our initial video traversal position.  Since the video vertex passes
@@ -308,10 +308,10 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
          */
         final KillrVideoTraversal traversal =
                 killr.video(videoId, name, addedDate, description, previewImageLocation)
-                        .sideEffect(uploaded(userId));
+                        .add(uploaded(userId));
 
         tags.forEach(tag -> {
-            traversal.sideEffect(taggedWith(tag, taggedDate));
+            traversal.add(taggedWith(tag, taggedDate));
         });
 
         /**
@@ -392,7 +392,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
          */
         final KillrVideoTraversal traversal =
                 killr.videos(userRatedVideo.getVideoId().getValue())
-                        .rated(UUID.fromString(userRatedVideo.getUserId().getValue()), userRatedVideo.getRating());
+                        .add(rated(UUID.fromString(userRatedVideo.getUserId().getValue()), userRatedVideo.getRating()));
 
         final CompletableFuture<GraphResultSet> ratingFuture =
                 FutureUtils.buildCompletableFuture(dseSession.executeGraphAsync(DseGraph.statementFromTraversal(traversal)));
