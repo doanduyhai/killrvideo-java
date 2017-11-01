@@ -46,7 +46,7 @@ public class SearchService extends AbstractSearchService {
     @Inject
     KillrVideoInputValidator validator;
 
-   @Inject
+    @Inject
     DseSession dseSession;
 
     private String tagsByLetterTableName;
