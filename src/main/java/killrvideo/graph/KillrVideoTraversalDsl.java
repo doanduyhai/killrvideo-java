@@ -213,6 +213,13 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
                                  .addE(EDGE_TAGGED_WITH).from("^video").inV());
     }
 
+    /** This step is an alias for the {@code sideEffect()} step. As an alias, it makes certain aspects of the DSL more
+     * readable.
+     */
+     public default GraphTraversal<S,?> add(Traversal<?,?> mutationTraversal) {
+        return sideEffect(mutationTraversal);
+     }
+
     /**
      * Recommendation engine - User rating engine
      * Using the videos I really like (rating 4-5), find other users who also really like the same videos, and grab
