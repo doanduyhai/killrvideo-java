@@ -28,4 +28,4 @@ target/*
 *.swp
 .java-version
 .env
-dse_data/
+dse-data/
