@@ -3,12 +3,10 @@ package killrvideo.events;
 import com.datastax.driver.core.*;
 import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.mapping.Mapper;
-import com.datastax.driver.mapping.MappingManager;
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.Subscribe;
 import killrvideo.entity.Schema;
 import killrvideo.entity.TagsByLetter;
-import killrvideo.entity.VideoByTag;
 import killrvideo.utils.FutureUtils;
 import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
 import org.slf4j.Logger;
@@ -29,34 +27,19 @@ public class VideoAddedHandlers {
     private static Logger LOGGER = LoggerFactory.getLogger(VideoAddedHandlers.class);
 
     @Inject
-    Mapper<VideoByTag> videosByTagMapper;
-
-    @Inject
     Mapper<TagsByLetter> tagsByLetterMapper;
-
-    @Inject
-    MappingManager manager;
 
     @Inject
     DseSession dseSession;
 
-    private String videosByTagTableName;
     private String tagsByLetterTableName;
-    private PreparedStatement videosByTagPrepared;
     private PreparedStatement tagsByLetterPrepared;
 
     @PostConstruct
     public void init() {
-        videosByTagTableName = videosByTagMapper.getTableMetadata().getName();
         tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
 
         // Prepared statements for handle()
-        videosByTagPrepared = dseSession.prepare(
-                "INSERT INTO " + Schema.KEYSPACE + "." + videosByTagTableName + " " +
-                        "(tag, videoid, added_date, userid, name, preview_image_location, tagged_date) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
-
         tagsByLetterPrepared = dseSession.prepare(
                 "INSERT INTO " + Schema.KEYSPACE + "." + tagsByLetterTableName + " " +
                         "(first_letter, tag) VALUES (?, ?)"
@@ -90,15 +73,10 @@ public class VideoAddedHandlers {
 
         //:TODO Potential implement this with mapper async by using saveAsync and build each statement in the batch with a future and handle
         tags.forEach(tag -> {
-            BoundStatement videosByTagBound = videosByTagPrepared.bind(
-                    tag, videoId, addedDate, userId, name, previewImageLocation, taggedDate
-            );
-
             BoundStatement tagsByLetterBound = tagsByLetterPrepared.bind(
                     tag.substring(0, 1), tag
             );
 
-            batchStatement.add(videosByTagBound);
             batchStatement.add(tagsByLetterBound);
         });
 

@@ -77,9 +77,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
     Mapper<LatestVideos> latestVideosMapper;
 
     @Inject
-    MappingManager manager;
-
-    @Inject
     DseSession dseSession;
 
     @Inject

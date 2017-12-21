@@ -44,9 +44,6 @@ public class MapperConfiguration {
     public Mapper<Video> videoMapper() { return manager.mapper(Video.class); }
 
     @Bean
-    public Mapper<VideoByTag> videosByTagMapper() { return manager.mapper(VideoByTag.class); }
-
-    @Bean
     public Mapper<VideoPlaybackStats> videoPlaybackStatsMapper() { return manager.mapper(VideoPlaybackStats.class); }
 
     @Bean

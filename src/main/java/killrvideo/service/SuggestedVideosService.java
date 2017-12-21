@@ -1,8 +1,6 @@
 package killrvideo.service;
 
-import com.datastax.driver.core.BoundStatement;
-import com.datastax.driver.core.ConsistencyLevel;
-import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.core.*;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.dse.graph.GraphNode;
@@ -10,20 +8,16 @@ import com.datastax.driver.dse.graph.GraphResultSet;
 import com.datastax.driver.dse.graph.GraphStatement;
 import com.datastax.driver.dse.graph.Vertex;
 import com.datastax.driver.mapping.Mapper;
-import com.datastax.driver.mapping.MappingManager;
 import com.datastax.driver.mapping.Result;
 import com.datastax.dse.graph.api.DseGraph;
 
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.Subscribe;
-import com.google.common.util.concurrent.ListenableFuture;
-import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 
 import killrvideo.common.CommonTypes.Uuid;
 import killrvideo.entity.Schema;
 import killrvideo.entity.Video;
-import killrvideo.entity.VideoByTag;
 import killrvideo.graph.KillrVideoTraversal;
 import killrvideo.graph.KillrVideoTraversalSource;
 import killrvideo.ratings.events.RatingsEvents.UserRatedVideo;
@@ -36,7 +30,6 @@ import killrvideo.validation.KillrVideoInputValidator;
 import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
 
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.map.HashedMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,27 +39,21 @@ import javax.inject.Inject;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Matcher;
+import java.util.stream.Collectors;
 
-import static java.util.stream.Collectors.toMap;
 import static killrvideo.graph.KillrVideoTraversalConstants.VERTEX_USER;
 import static killrvideo.graph.KillrVideoTraversalConstants.VERTEX_VIDEO;
 import static killrvideo.graph.__.*;
+import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 @Service
 public class SuggestedVideosService extends AbstractSuggestedVideoService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SuggestedVideosService.class);
 
-    public static final int RELATED_VIDEOS_TO_RETURN = 4;
-
     @Inject
     Mapper<Video> videoMapper;
-
-    @Inject
-    Mapper<VideoByTag> videoByTagMapper;
-
-    @Inject
-    MappingManager manager;
 
     @Inject
     DseSession dseSession;
@@ -77,19 +64,23 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
     @Inject
     KillrVideoInputValidator validator;
 
-    private String videoByTagTableName;
-    private PreparedStatement getRelatedVideos_getVideosByTagPrepared;
+    private String videosTableName;
+    private PreparedStatement getRelatedVideos_getVideosPrepared;
 
     @PostConstruct
     public void init(){
-        videoByTagTableName = videoByTagMapper.getTableMetadata().getName();
+        videosTableName = videoMapper.getTableMetadata().getName();
 
-        getRelatedVideos_getVideosByTagPrepared = dseSession.prepare(
+        /**
+         * Use DSE Search against the tags column from the videos table to
+         * find our related videos
+         */
+        getRelatedVideos_getVideosPrepared = dseSession.prepare(
                 QueryBuilder
                         .select().all()
-                        .from(Schema.KEYSPACE, videoByTagTableName)
-                        .where(QueryBuilder.eq("tag", QueryBuilder.bindMarker()))
-        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
+                        .from(Schema.KEYSPACE, videosTableName)
+                        .where(QueryBuilder.eq("solr_query", QueryBuilder.bindMarker()))
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_ONE);
     }
 
     @Override
@@ -101,101 +92,144 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
             return;
         }
 
-        final UUID videoId = UUID.fromString(request.getVideoId().getValue());
+        final Uuid videoIdUuid = request.getVideoId();
+        final UUID videoId = UUID.fromString(videoIdUuid.getValue());
 
-        final GetRelatedVideosResponse.Builder builder = GetRelatedVideosResponse.newBuilder();
-        builder.setVideoId(request.getVideoId());
+        final GetRelatedVideosResponse.Builder builder = GetRelatedVideosResponse.newBuilder()
+                .setVideoId(videoIdUuid);
 
         /**
-         * Load the source video
+         * Load the source video asynchronously
          */
-        FutureUtils.buildCompletableFuture(videoMapper.getAsync(videoId))
-                /**
-                 * I use the *Async() version of .handle below because I am
-                 * chaining multiple async futures.  In testing we found that chains like
-                 * this would cause timeouts possibly from starvation.
-                 */
-                .handleAsync((video, ex) -> {
-                    if (video == null) {
-                        returnNoResult(responseObserver, builder);
-                        return null;
+        final CompletableFuture<Video> videoFuture =
+                FutureUtils.buildCompletableFuture(videoMapper.getAsync(videoId))
+                        .handle((video, ex) -> {
+                            if (video != null) {
+                                return video;
 
-                    } else {
-                        /**
-                         * Return immediately if the source video has
-                         * no tags
-                         */
-                        if (CollectionUtils.isEmpty(video.getTags())) {
-                            returnNoResult(responseObserver, builder);
+                            } else if (ex != null) {
+                                LOGGER.error(this.getClass().getName() + ".getRelatedVideos()_videoFuture Exception getting related videos: " + mergeStackTrace(ex));
 
-                        } else {
-                            final List<String> tags = new ArrayList<>(video.getTags());
-                            Map<Uuid, SuggestedVideoPreview> results = new HashedMap();
+                                returnNoResult(responseObserver, builder);
+                                return null;
 
-                            /**
-                             * Use the number of results we ultimately want * 2 when querying so that we can account
-                             * for potentially having to filter out the video Id we're using as the basis for the query
-                             * as well as duplicates
-                             **/
-                            final int pageSize = RELATED_VIDEOS_TO_RETURN * 2;
-                            final List<ListenableFuture<Result<VideoByTag>>> inFlightQueries = new ArrayList<>();
+                            } else {
+                                LOGGER.warn("Video with id " + videoId + " was not found in getRelatedVideos()_videoFuture");
 
-                            /** Kick off a query for each tag and track them in the inflight requests list **/
-                            for (int i = 0; i < tags.size(); i++) {
-                                String tag = tags.get(i);
-
-                                BoundStatement statement = getRelatedVideos_getVideosByTagPrepared.bind()
-                                        .setString("tag", tag);
-
-                                statement
-                                        .setFetchSize(pageSize);
-
-                                /**
-                                 * By wrapping my session.executeAsync() method with
-                                 * the DSE mapper videoByTagMapper.mapAsync() function I am
-                                 * 1) automagically mapping the results to VideoByTag entities and
-                                 * 2) automagically creating a prepared statement the mapper will use for
-                                 * any subsequent calls to this same query.
-                                 */
-                                inFlightQueries.add(videoByTagMapper.mapAsync(dseSession.executeAsync(statement)));
-
-                                //:TODO Refactor this section to break it up and make it easier to follow/read
-                                /** Every third query, or if this is the last tag, wait on all the query results **/
-                                if (inFlightQueries.size() == 3 || i == tags.size() - 1) {
-                                    for (ListenableFuture<Result<VideoByTag>> videos : inFlightQueries) {
-                                        try {
-                                            LOGGER.debug("Handler thread " + Thread.currentThread().toString());
-
-                                            //TODO: Potentially move away from using get()
-                                            results.putAll(videos.get().all()
-                                                    .stream()
-                                                    .map(VideoByTag::toSuggestedVideoPreview)
-                                                    .filter(previewVid ->
-                                                            !previewVid.getVideoId().equals(request.getVideoId())
-                                                                    && !results.containsKey(previewVid.getVideoId())
-                                                    )
-                                                    .collect(toMap(preview -> preview.getVideoId(), preview -> preview)));
-
-                                        } catch (Exception e) {
-                                            responseObserver.onError(Status.INTERNAL.withCause(e).asRuntimeException());
-                                        }
-                                    }
-
-                                    if (results.size() >= RELATED_VIDEOS_TO_RETURN) {
-                                        break;
-                                    } else {
-                                        inFlightQueries.clear();
-                                    }
-                                }
+                                returnNoResult(responseObserver, builder);
+                                return null;
                             }
-                            builder.addAllVideos(results.values());
-                            responseObserver.onNext(builder.build());
-                            responseObserver.onCompleted();
+                        });
 
-                            LOGGER.debug(String.format("End getting related videos with %s videos", results.size()));
+
+        /**
+         * If we get to this point we have our video, now construct
+         * the search query and fire it off asynchronously
+         */
+        CompletableFuture<Result<Video>> relatedVideosFuture = videoFuture.thenCompose(video -> {
+            Boolean isSearchTerms = true;
+            final StringBuilder solrQuery = new StringBuilder();
+            final String replaceFind = "\"";
+            final String replaceWith = "\\\"";
+
+            /**
+             * Check to see if any tags exist, if not use the video
+             * name to find related videos
+             */
+            if (CollectionUtils.isEmpty(video.getTags())) {
+                /**
+                 * Get the VIDEO NAME, check for any quotes, and
+                 * replace them with \" or the solr_query JSON parser will
+                 * complain
+                 */
+                String videoName = video.getName()
+                        .replaceAll(replaceFind, Matcher.quoteReplacement(replaceWith));
+
+                /**
+                 * If both tags and the video name are empty we have no search terms
+                 */
+                if (videoName.isEmpty()) {
+                    isSearchTerms = false;
+
+                } else {
+                    /**
+                     * Now append the VIDEO NAME from above into our solr_query
+                     * search along with "paging":"driver" to ensure we dynamically
+                     * enable pagination regardless of our nodes dse.yaml setting.
+                     * https://docs.datastax.com/en/dse/5.1/dse-dev/datastax_enterprise/search/cursorsDeepPaging.html#cursorsDeepPaging__srchCursorCQL
+                     */
+                    //TODO: Replace edismax parser with DSE Search equivalent
+                    solrQuery
+                            .append("{\"q\":\"{!edismax qf=\\\"name^10 tags description^2\\\"}")
+                            .append(videoName)
+                            .append("\", \"paging\":\"driver\"}");
+                }
+
+            } else {
+                /**
+                 * Grab any TAGS, join each tag in the collection with ",",
+                 * check for any quotes, and replace them with \" or the solr_query
+                 * JSON parser will complain.  Append all of this into our
+                 * solr_query search along with "paging":"driver" as explained above.
+                 */
+                //TODO: Replace edismax parser with DSE Search equivalent
+                String tags = video.getTags().stream().collect(Collectors.joining((",")))
+                        .replaceAll(replaceFind, Matcher.quoteReplacement(replaceWith));
+                solrQuery
+                        .append("{\"q\":\"{!edismax qf=\\\"name tags description\\\"}")
+                        .append(tags)
+                        .append("\", \"paging\":\"driver\"}");
+            }
+
+            if (isSearchTerms) {
+                LOGGER.debug("getRelatedVideos() solr_query is : " + solrQuery);
+                BoundStatement statement = getRelatedVideos_getVideosPrepared.bind()
+                        .setString("solr_query", solrQuery.toString());
+
+                statement
+                        .setFetchSize(request.getPageSize());
+
+                return FutureUtils.buildCompletableFuture(videoMapper.mapAsync(dseSession.executeAsync(statement)));
+
+            } else {
+                /**
+                 * We have no tags or video name, so essentially do nothing
+                 * as there is nothing we can search
+                 */
+                returnNoResult(responseObserver, builder);
+                return null;
+            }
+        });
+
+        /**
+         * Get the results from our search query and send them
+         * back to the UI
+         */
+        relatedVideosFuture
+                .whenComplete((videos, ex) -> {
+                    if (videos != null) {
+                        int remaining = videos.getAvailableWithoutFetching();
+                        for (Video video : videos) {
+                            SuggestedVideoPreview preview = video.toSuggestedVideoPreview();
+
+                            if (!preview.getVideoId().equals(videoIdUuid)) {
+                                builder.addVideos(preview);
+                            }
+
+                            if (--remaining == 0) {
+                                break;
+                            }
                         }
+
+                        responseObserver.onNext(builder.build());
+                        responseObserver.onCompleted();
+
+                        LOGGER.debug(String.format("End getting related videos with %s videos", builder.getVideosBuilderList().size()));
+
+                    } else if (ex != null) {
+                        returnNoResult(responseObserver, builder);
+                        LOGGER.error(this.getClass().getName() + ".getRelatedVideos()_relatedVideosFuture Exception getting related videos: " + mergeStackTrace(ex));
                     }
-                    return video;
                 });
     }
 
@@ -203,7 +237,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
         responseObserver.onNext(builder.build());
         responseObserver.onCompleted();
 
-        LOGGER.debug("End getting related videos with 0 video");
+        LOGGER.debug("End getting related videos with 0 videos");
     }
 
     @Override
@@ -232,7 +266,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
              * local user ratings to sample - the number of local user ratings to limit by
              */
             GraphStatement gStatement = DseGraph.statementFromTraversal(killr.users(userIdString)
-                    .recommendByUserRating(100, 4, 500, 10)
+                    .recommendByUserRating(100, 4, 250, 10)
             );
 
             CompletableFuture<GraphResultSet> future = FutureUtils.buildCompletableFuture(dseSession.executeGraphAsync(gStatement));
