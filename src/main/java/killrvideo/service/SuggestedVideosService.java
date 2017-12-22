@@ -231,9 +231,12 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
              * number of ratings to sample - the number of global user ratings to sample (smaller means faster traversal)
              * local user ratings to sample - the number of local user ratings to limit by
              */
-            GraphStatement gStatement = DseGraph.statementFromTraversal(killr.users(userIdString)
-                    .recommendByUserRating(100, 4, 500, 10)
-            );
+            KillrVideoTraversal traversal = killr.users(userIdString)
+                    .recommendByUserRating(100, 4, 500, 10);
+
+            GraphStatement gStatement = DseGraph.statementFromTraversal(traversal);
+
+            LOGGER.debug("Recommend TRAVERSAL is: " + TypeConverter.bytecodeToTraversalString(traversal));
 
             CompletableFuture<GraphResultSet> future = FutureUtils.buildCompletableFuture(dseSession.executeGraphAsync(gStatement));
 
@@ -256,11 +259,17 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                     }
                     // Add suggested videos...
                     builder.addAllVideos(result);
-                    responseObserver.onNext(builder.build());
-                    responseObserver.onCompleted();
+
                 } else {
-                    LOGGER.warn("Exception in SuggestedVideosService.getSuggestedForUser recommendByUserRating() recommendation traversal: " + ex);
+                    LOGGER.error("Exception in SuggestedVideosService.getSuggestedForUser recommendByUserRating() recommendation traversal: " + ex);
                 }
+
+                /**
+                 * No matter what provide a response, empty or with videos
+                 * This will keep the UI from hanging if an error occurs for some reason
+                 */
+                responseObserver.onNext(builder.build());
+                responseObserver.onCompleted();
             });
 
         } catch (Exception ex) {
