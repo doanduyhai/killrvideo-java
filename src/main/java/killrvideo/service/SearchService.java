@@ -2,8 +2,9 @@ package killrvideo.service;
 
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
-import java.util.Optional;
+import java.util.*;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
@@ -11,8 +12,8 @@ import com.datastax.driver.core.*;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.mapping.Mapper;
+import com.google.common.reflect.TypeToken;
 import killrvideo.entity.Schema;
-import killrvideo.entity.TagsByLetter;
 import killrvideo.entity.Video;
 import killrvideo.utils.FutureUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -35,9 +36,6 @@ public class SearchService extends AbstractSearchService {
     private static final Logger LOGGER = LoggerFactory.getLogger(SearchService.class);
 
     @Inject
-    Mapper<TagsByLetter> tagsByLetterMapper;
-
-    @Inject
     Mapper<Video> videosMapper;
 
     @Inject
@@ -46,30 +44,29 @@ public class SearchService extends AbstractSearchService {
     @Inject
     DseSession dseSession;
 
-    private String tagsByLetterTableName;
     private String videosTableName;
     private PreparedStatement getQuerySuggestions_getTagsPrepared;
     private PreparedStatement searchVideos_getVideosWithSearchPrepared;
+    private final Set<String> excludeConjunctions = new HashSet<String>() {};
 
     @PostConstruct
     public void init() {
-        tagsByLetterTableName = tagsByLetterMapper.getTableMetadata().getName();
         videosTableName = videosMapper.getTableMetadata().getName();
-
-        getQuerySuggestions_getTagsPrepared = dseSession.prepare(
-                QueryBuilder
-                        .select()
-                        .from(Schema.KEYSPACE, tagsByLetterTableName)
-                        .where(QueryBuilder.eq("first_letter", QueryBuilder.bindMarker()))
-                        .and(QueryBuilder.gte("tag", QueryBuilder.bindMarker()))
-        ).setConsistencyLevel(ConsistencyLevel.LOCAL_QUORUM);
 
         /**
          * Pass a column name of "solr_query" to the QueryBuilder because we are
          * using DSE Search to provide a more comprehensive video search experience.
-         * Notice we are using a consistency of LOCAL_ONE instead of LOCAL_QUORUM as for other
-         * queries.  LOCAL_QUORUM is not currently supported by DSE Search.
+         * Notice we are using a consistency of LOCAL_ONE instead of LOCAL_QUORUM
+         * as compared to other queries.  LOCAL_QUORUM is not currently supported by DSE Search.
          */
+
+        getQuerySuggestions_getTagsPrepared = dseSession.prepare(
+                QueryBuilder
+                        .select("name", "tags")
+                        .from(Schema.KEYSPACE, videosTableName)
+                        .where(QueryBuilder.eq("solr_query", QueryBuilder.bindMarker()))
+        ).setConsistencyLevel(ConsistencyLevel.LOCAL_ONE);
+
         searchVideos_getVideosWithSearchPrepared = dseSession.prepare(
                 QueryBuilder
                         .select()
@@ -77,6 +74,28 @@ public class SearchService extends AbstractSearchService {
                         .from(Schema.KEYSPACE, videosTableName)
                         .where(QueryBuilder.eq("solr_query", QueryBuilder.bindMarker()))
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_ONE);
+
+        /**
+         * Create a set of sentence conjunctions and other "undesirable"
+         * words we will use later to exclude from search results
+         */
+        excludeConjunctions.add("and");
+        excludeConjunctions.add("or");
+        excludeConjunctions.add("but");
+        excludeConjunctions.add("nor");
+        excludeConjunctions.add("so");
+        excludeConjunctions.add("for");
+        excludeConjunctions.add("yet");
+        excludeConjunctions.add("after");
+        excludeConjunctions.add("as");
+        excludeConjunctions.add("till");
+        excludeConjunctions.add("to");
+        excludeConjunctions.add("the");
+        excludeConjunctions.add("at");
+        excludeConjunctions.add("in");
+        excludeConjunctions.add("not");
+        excludeConjunctions.add("of");
+        excludeConjunctions.add("this");
     }
 
     @Override
@@ -109,10 +128,18 @@ public class SearchService extends AbstractSearchService {
         String requestQuery = request.getQuery()
                 .replaceAll(replaceFind, Matcher.quoteReplacement(replaceWith));
 
+        /**
+         * In this case we are using DSE Search to query across the name, tags, and
+         * description columns with a boost on name and tags.  Note that tags is a
+         * collection of tags per each row with no extra steps to include all data
+         * in the collection.  This is a more comprehensive search as
+         * we are not just looking at values within the tags column, but also looking
+         * across the other fields for similar occurrences.  This is especially helpful
+         * if there are no tags for a given video as it is more likely to give us results.
+         */
         solrQuery
                 .append("{\"q\":\"{!edismax qf=\\\"name^2 tags^1 description\\\"}")
-                .append(requestQuery)
-                .append("\", \"paging\":\"driver\"}");
+                .append(requestQuery).append("\", \"paging\":\"driver\"}");
 
         LOGGER.debug("searchVideos() solr_query is : " + solrQuery);
         BoundStatement statement = searchVideos_getVideosWithSearchPrepared.bind()
@@ -122,6 +149,11 @@ public class SearchService extends AbstractSearchService {
 
         pagingState.ifPresent( x -> statement.setPagingState(PagingState.fromString(x)));
 
+        /**
+         * Even though we are using a DSE Search powered query it is still
+         * a CQL query so we can use the same execution style and result types
+         * we would expect from a pure CQL query.
+         */
         FutureUtils.buildCompletableFuture(videosMapper.mapAsync(dseSession.executeAsync(statement)))
                 .handle((videos, ex) -> {
                     if (videos != null) {
@@ -162,26 +194,79 @@ public class SearchService extends AbstractSearchService {
             return;
         }
 
+        /**
+         * Do a query against DSE search to find query suggestions using a simple search.
+         * The search_suggestions "column" references a field we created in our search index
+         * to store name and tag data.
+         *
+         * Notice the "paging":"driver" parameter.  This is to ensure we dynamically
+         * enable pagination regardless of our nodes dse.yaml setting.
+         * https://docs.datastax.com/en/dse/5.1/dse-dev/datastax_enterprise/search/cursorsDeepPaging.html#cursorsDeepPaging__srchCursorCQL
+         */
+        final StringBuilder solrQuery = new StringBuilder();
+        solrQuery
+                .append("{\"q\":\"search_suggestions:")
+                .append(request.getQuery()).append("*\", \"paging\":\"driver\"}");
+
+        LOGGER.debug("getQuerySuggestions() solr_query is : " + solrQuery);
         BoundStatement statement = getQuerySuggestions_getTagsPrepared.bind()
-                .setString("first_letter", request.getQuery().substring(0, 1))
-                .setString("tag", request.getQuery());
+                .setString("solr_query", solrQuery.toString());
 
         statement.setFetchSize(request.getPageSize());
 
-        FutureUtils.buildCompletableFuture(tagsByLetterMapper.mapAsync(dseSession.executeAsync(statement)))
-                .handle((tags, ex) -> {
-                    if (tags != null) {
+        /**
+         * In this case since I am only returning the name and tags columns and
+         * not a complete entity I am not using a mapper, just a normal query
+         * with a "Row" result set.
+         *
+         * Also notice the use of regex pattern matching below.  This is used to
+         * parse out suggestion words from the names and tags we pulled using search.
+         */
+        FutureUtils.buildCompletableFuture(dseSession.executeAsync(statement))
+                .handle((rows, ex) -> {
+                    if (rows != null) {
                         final GetQuerySuggestionsResponse.Builder builder = GetQuerySuggestionsResponse.newBuilder();
 
-                        int remaining = tags.getAvailableWithoutFetching();
-                        for (TagsByLetter tag : tags) {
-                            builder.addSuggestions(tag.getTag());
+                        // Use a TreeSet to ensure 1) no duplicates, and 2) words are ordered naturally alphabetically
+                        final Set<String> suggestionSet = new TreeSet<>();
+
+                        /**
+                         * Here, we are inserting the request from the search bar, maybe something
+                         * like "c", "ca", or "cas" as someone starts to type the word "cassandra".
+                         * For each of these cases we are looking for any words in the search data that
+                         * start with the values above.
+                         */
+                        final String pattern = "(?i)\\b" + request.getQuery() + "[a-z]*\\b";
+                        final Pattern checkRegex = Pattern.compile(pattern);
+
+                        int remaining = rows.getAvailableWithoutFetching();
+                        for (Row row : rows) {
+                            String name = row.getString("name");
+                            Set<String> tags = row.getSet("tags", new TypeToken<String>() {});
+
+                            /**
+                             * Since I simply want matches from both the name and tags fields
+                             * concatenate them together, apply regex, and add any results into
+                             * our suggestionSet TreeMap.  The TreeMap will handle any duplicates.
+                             */
+                            Matcher regexMatcher = checkRegex.matcher(name.concat(tags.toString()));
+                            while (regexMatcher.find()) {
+                                suggestionSet.add(regexMatcher.group().toLowerCase());
+                            }
 
                             if (--remaining == 0) {
                                 break;
                             }
                         }
 
+                        /**
+                         * Exclude words that aren't really all that helpful for this type
+                         * of search like "and", "of", "the", etc...
+                         */
+                        suggestionSet.removeAll(excludeConjunctions);
+
+                        // Send our results back to the client
+                        builder.addAllSuggestions(suggestionSet);
                         builder.setQuery(request.getQuery());
                         responseObserver.onNext(builder.build());
                         responseObserver.onCompleted();
@@ -193,7 +278,7 @@ public class SearchService extends AbstractSearchService {
 
                         responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
                     }
-                    return tags;
+                    return rows;
                 });
     }
 
