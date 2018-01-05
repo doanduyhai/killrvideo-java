@@ -29,7 +29,6 @@ import killrvideo.utils.TypeConverter;
 import killrvideo.validation.KillrVideoInputValidator;
 import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
 
-import org.apache.commons.collections4.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -39,8 +38,6 @@ import javax.inject.Inject;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.regex.Matcher;
-import java.util.stream.Collectors;
 
 import static killrvideo.graph.KillrVideoTraversalConstants.VERTEX_USER;
 import static killrvideo.graph.KillrVideoTraversalConstants.VERTEX_VIDEO;
@@ -127,78 +124,29 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
          * the search query and fire it off asynchronously
          */
         CompletableFuture<Result<Video>> relatedVideosFuture = videoFuture.thenCompose(video -> {
-            Boolean isSearchTerms = true;
             final StringBuilder solrQuery = new StringBuilder();
-            final String replaceFind = "\"";
-            final String replaceWith = "\\\"";
 
             /**
-             * Check to see if any tags exist, if not use the video
-             * name to find related videos
+             * Use a Lucene based MoreLikeThis search with DSE Search
+             * !mlt = perform MoreLikeThis
+             * qf = More like this fields to consider
+             * mindf = MLT Minimum Document Frequency - the frequency at which words will be ignored which do not occur in at least this many docs
+             * mintf = MLT Minimum Term Frequency - the frequency below which terms will be ignored in the source doc
              */
-            if (CollectionUtils.isEmpty(video.getTags())) {
-                /**
-                 * Get the VIDEO NAME, check for any quotes, and
-                 * replace them with \" or the solr_query JSON parser will
-                 * complain
-                 */
-                String videoName = video.getName()
-                        .replaceAll(replaceFind, Matcher.quoteReplacement(replaceWith));
+            //:TODO Figure out what is going on with paging:driver returning strange results
+            solrQuery
+                    .append("{\"q\":\"{!mlt qf=\\\"name tags description\\\" mindf=2 mintf=2}")
+                    .append(video.getVideoid()).append("\", \"paging\":\"off\"}");
 
-                /**
-                 * If both tags and the video name are empty we have no search terms
-                 */
-                if (videoName.isEmpty()) {
-                    isSearchTerms = false;
+            LOGGER.debug("getRelatedVideos() solr_query is : " + solrQuery);
+            BoundStatement statement = getRelatedVideos_getVideosPrepared.bind()
+                    .setString("solr_query", solrQuery.toString());
 
-                } else {
-                    /**
-                     * Now append the VIDEO NAME from above into our solr_query
-                     * search along with "paging":"driver" to ensure we dynamically
-                     * enable pagination regardless of our nodes dse.yaml setting.
-                     * https://docs.datastax.com/en/dse/5.1/dse-dev/datastax_enterprise/search/cursorsDeepPaging.html#cursorsDeepPaging__srchCursorCQL
-                     */
-                    //TODO: Replace edismax parser with DSE Search equivalent
-                    solrQuery
-                            .append("{\"q\":\"{!edismax qf=\\\"name^10 tags description^2\\\"}")
-                            .append(videoName)
-                            .append("\", \"paging\":\"driver\"}");
-                }
+            statement
+                    .setFetchSize(request.getPageSize());
 
-            } else {
-                /**
-                 * Grab any TAGS, join each tag in the collection with ",",
-                 * check for any quotes, and replace them with \" or the solr_query
-                 * JSON parser will complain.  Append all of this into our
-                 * solr_query search along with "paging":"driver" as explained above.
-                 */
-                //TODO: Replace edismax parser with DSE Search equivalent
-                String tags = video.getTags().stream().collect(Collectors.joining((",")))
-                        .replaceAll(replaceFind, Matcher.quoteReplacement(replaceWith));
-                solrQuery
-                        .append("{\"q\":\"{!edismax qf=\\\"name tags description\\\"}")
-                        .append(tags)
-                        .append("\", \"paging\":\"driver\"}");
-            }
+            return FutureUtils.buildCompletableFuture(videoMapper.mapAsync(dseSession.executeAsync(statement)));
 
-            if (isSearchTerms) {
-                LOGGER.debug("getRelatedVideos() solr_query is : " + solrQuery);
-                BoundStatement statement = getRelatedVideos_getVideosPrepared.bind()
-                        .setString("solr_query", solrQuery.toString());
-
-                statement
-                        .setFetchSize(request.getPageSize());
-
-                return FutureUtils.buildCompletableFuture(videoMapper.mapAsync(dseSession.executeAsync(statement)));
-
-            } else {
-                /**
-                 * We have no tags or video name, so essentially do nothing
-                 * as there is nothing we can search
-                 */
-                returnNoResult(responseObserver, builder);
-                return null;
-            }
         });
 
         /**
@@ -265,9 +213,12 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
              * number of ratings to sample - the number of global user ratings to sample (smaller means faster traversal)
              * local user ratings to sample - the number of local user ratings to limit by
              */
-            GraphStatement gStatement = DseGraph.statementFromTraversal(killr.users(userIdString)
-                    .recommendByUserRating(100, 4, 250, 10)
-            );
+            KillrVideoTraversal traversal = killr.users(userIdString)
+                    .recommendByUserRating(100, 4, 250, 10);
+
+            GraphStatement gStatement = DseGraph.statementFromTraversal(traversal);
+
+            LOGGER.debug("Recommend TRAVERSAL is: " + TypeConverter.bytecodeToTraversalString(traversal));
 
             CompletableFuture<GraphResultSet> future = FutureUtils.buildCompletableFuture(dseSession.executeGraphAsync(gStatement));
 
@@ -290,11 +241,17 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
                     }
                     // Add suggested videos...
                     builder.addAllVideos(result);
-                    responseObserver.onNext(builder.build());
-                    responseObserver.onCompleted();
+
                 } else {
-                    LOGGER.warn("Exception in SuggestedVideosService.getSuggestedForUser recommendByUserRating() recommendation traversal: " + ex);
+                    LOGGER.error("Exception in SuggestedVideosService.getSuggestedForUser recommendByUserRating() recommendation traversal: " + ex);
                 }
+
+                /**
+                 * No matter what provide a response, empty or with videos
+                 * This will keep the UI from hanging if an error occurs for some reason
+                 */
+                responseObserver.onNext(builder.build());
+                responseObserver.onCompleted();
             });
 
         } catch (Exception ex) {

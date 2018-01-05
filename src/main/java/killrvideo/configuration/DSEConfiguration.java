@@ -82,10 +82,10 @@ public class DSEConfiguration {
              */
             String dseUsername = properties.dseUsername;
             String dsePassword = properties.dsePassword;
-            if (dseUsername != null && dsePassword != null) {
+            if (dseUsername != null && dseUsername.length() > 0 && dsePassword != null) {
                 Integer passwordLength = dsePassword.length();
-                LOGGER.info("Using supplied DSE username: \"" + dseUsername + "\" and password: \"***" +
-                        dsePassword.substring(passwordLength - 4, passwordLength) + "\" from environment variables");
+                LOGGER.info("Using supplied DSE username: \"" + dseUsername + "\" and password: \"" +
+                        new String(new char[passwordLength]).replace("\0", "*") + "\" from environment variables");
 
                 clusterConfig
                         .withAuthProvider(new DsePlainTextAuthProvider(dseUsername, dsePassword));

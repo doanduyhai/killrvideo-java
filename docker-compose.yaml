@@ -1,4 +1,4 @@
-version: '2'
+version: '3'
 
 # Other services are specified in .\lib\killrvideo-docker-common\docker-compose.yaml
 services:
@@ -34,7 +34,7 @@ services:
 
   # One instance of DataStax Studio
   studio:
-    image: killrvideo/killrvideo-studio:1.0.0
+    image: killrvideo/killrvideo-studio:2.0.0
     ports:
     # The Web UI exposed to our host
     - "9091:9091"
@@ -42,4 +42,6 @@ services:
     - dse
     environment:
       SERVICE_9091_NAME: studio
+      DS_LICENSE: accept
+
 
