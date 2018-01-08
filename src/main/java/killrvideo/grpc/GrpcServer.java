@@ -23,7 +23,6 @@ import io.grpc.ServerServiceDefinition;
 import killrvideo.comments.CommentsServiceGrpc;
 import killrvideo.configuration.KillrVideoProperties;
 import killrvideo.events.CassandraMutationErrorHandler;
-import killrvideo.events.VideoAddedHandlers;
 import killrvideo.ratings.RatingsServiceGrpc;
 import killrvideo.search.SearchServiceGrpc;
 import killrvideo.service.*;
@@ -64,9 +63,6 @@ public class GrpcServer {
 
     @Inject
     EventBus eventBus;
-
-    @Inject
-    VideoAddedHandlers videoAddedHandlers;
 
     @Inject
     SuggestedVideosService suggestedVideosService;
@@ -111,7 +107,6 @@ public class GrpcServer {
 
         LOGGER.info("Starting Grpc Server on port " + port);
 
-        eventBus.register(videoAddedHandlers);
         eventBus.register(suggestedVideosService);
         eventBus.register(cassandraMutationErrorHandler);
 
@@ -136,7 +131,6 @@ public class GrpcServer {
 
     @PreDestroy
     public void stop() {
-        eventBus.unregister(videoAddedHandlers);
         eventBus.unregister(suggestedVideosService);
         eventBus.unregister(cassandraMutationErrorHandler);
         server.shutdown();

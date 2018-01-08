@@ -52,9 +52,6 @@ public class UserManagementService extends AbstractUserManagementService {
     Mapper<User> userMapper;
 
     @Inject
-    MappingManager manager;
-
-    @Inject
     DseSession dseSession;
 
     @Inject
