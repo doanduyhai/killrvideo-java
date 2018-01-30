@@ -3,7 +3,9 @@
 A reference application for Java developers looking to learn more about using [Apache Cassandra][cassandra] and
 [DataStax Enterprise][dse] in their applications and services. Learn more at [KillrVideo].
 
-NOTE: We are now fully switched to using version 1.2.4 of the [DSE java driver][DSE Java driver]!  API docs are [here][DSE Java driver API docs].  This version is stable and ready for consumption.
+The current version of KillrVideo Java includes Cassandra, DSE Search, and DSE Graph with [DSL's (Domain Specific Languages)][gremlindsljava].  DSE Graph powers the recommendation engine and all search capabilites are powered with DSE Search.
+
+NOTE: We are now fully switched to using version 1.4.2 of the [DSE java driver][DSE Java driver]!  API docs are [here][DSE Java driver API docs].
 
 ## Running Locally
 
@@ -22,7 +24,7 @@ that you don't see in the code currently, send me a message [@SonicDMG][twitter]
 [here][issues] on GitHub.
 
 ## License
-Copyright 2017 David Gilardi, derived from original work by Duy Hai Doan
+Copyright 2018 David Gilardi, derived from original work by Duy Hai Doan
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,7 +44,8 @@ limitations under the License.
 [getting-started]: https://killrvideo.github.io/getting-started/
 [getting-started-java]: https://killrvideo.github.io/docs/languages/java/
 [twitter]: https://twitter.com/SonicDMG
-[DSE Java driver API docs]: https://github.com/datastax/java-dse-driver
-[DSE Java driver]: https://docs.datastax.com/en/developer/java-driver-dse/1.2/
+[DSE Java driver API docs]: http://docs.datastax.com/en/drivers/java-dse/1.4/
+[DSE Java driver]: https://docs.datastax.com/en/developer/java-driver-dse/1.4/
 [issues]: https://github.com/KillrVideo/killrvideo-java/issues
+[gremlindsljava]: https://www.datastax.com/dev/blog/gremlin-dsls-in-java-with-dse-graph
 
