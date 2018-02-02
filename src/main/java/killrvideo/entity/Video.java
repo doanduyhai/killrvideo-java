@@ -19,6 +19,8 @@ import killrvideo.utils.TypeConverter;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetVideoResponse;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoLocationType;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
+import killrvideo.search.SearchServiceOuterClass.SearchResultsVideoPreview;
+import killrvideo.suggested_videos.SuggestedVideosService.SuggestedVideoPreview;
 
 @Table(keyspace = KEYSPACE, name = "videos")
 public class Video extends AbstractVideo{
@@ -153,6 +155,28 @@ public class Video extends AbstractVideo{
                 .setPreviewImageLocation(previewImageLocation)
                 .setUserId(TypeConverter.uuidToUuid(userid))
                 .setVideoId(TypeConverter.uuidToUuid(videoid))
+                .build();
+    }
+
+    public SearchResultsVideoPreview toResultVideoPreview() {
+        return SearchResultsVideoPreview
+                .newBuilder()
+                .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
+                .setName(name)
+                .setPreviewImageLocation(previewImageLocation)
+                .setUserId(TypeConverter.uuidToUuid(userid))
+                .setVideoId(TypeConverter.uuidToUuid(videoid))
+                .build();
+    }
+
+    public SuggestedVideoPreview toSuggestedVideoPreview() {
+        return SuggestedVideoPreview
+                .newBuilder()
+                .setVideoId(TypeConverter.uuidToUuid(videoid))
+                .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
+                .setName(name)
+                .setPreviewImageLocation(previewImageLocation)
+                .setUserId(TypeConverter.uuidToUuid(userid))
                 .build();
     }
 }

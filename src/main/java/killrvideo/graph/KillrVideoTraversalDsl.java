@@ -270,6 +270,9 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
                         .local(__.outE(EDGE_RATED).has(KEY_RATING, gte(minRating)).limit(localUserRatingsToSample)).sack(assign).by(KEY_RATING).inV()
                         // excluding the videos I have already watched
                         .not(__.where(within("^watchedVideos")))
+                        // Filter out the video if for some reason there is no uploaded edge to a user
+                        // I found this could be a case where an "uploaded" edge was not created for a video given we don't guarantee graph data
+                        .filter(__.in(EDGE_UPLOADED).hasLabel(VERTEX_USER))
                         // what are the most popular videos as calculated by the sum of all their ratings
                         .group().by().by(__.sack().sum())
                         // now that we have that big map of [video: score], lets order it

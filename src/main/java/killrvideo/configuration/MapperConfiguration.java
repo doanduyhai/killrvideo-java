@@ -30,9 +30,6 @@ public class MapperConfiguration {
     public Mapper<LatestVideos> latestVideosMapper() { return manager.mapper(LatestVideos.class); }
 
     @Bean
-    public Mapper<TagsByLetter> tagsByLetterMapper() { return manager.mapper(TagsByLetter.class); }
-
-    @Bean
     public Mapper<UserCredentials> userCredentialsMapper() {
         return manager.mapper(UserCredentials.class);
     }
@@ -42,9 +39,6 @@ public class MapperConfiguration {
 
     @Bean
     public Mapper<Video> videoMapper() { return manager.mapper(Video.class); }
-
-    @Bean
-    public Mapper<VideoByTag> videosByTagMapper() { return manager.mapper(VideoByTag.class); }
 
     @Bean
     public Mapper<VideoPlaybackStats> videoPlaybackStatsMapper() { return manager.mapper(VideoPlaybackStats.class); }
