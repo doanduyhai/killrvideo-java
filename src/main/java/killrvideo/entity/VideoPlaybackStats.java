@@ -26,26 +26,50 @@ public class VideoPlaybackStats {
     @Column
     private Long views;
 
-    public UUID getVideoid() {
-        return videoid;
-    }
-
-    public void setVideoid(UUID videoid) {
-        this.videoid = videoid;
-    }
-
-    public Long getViews() {
-        return views;
-    }
-
-    public void setViews(Long views) {
-        this.views = views;
-    }
-
     public PlayStats toPlayStats() {
         return PlayStats.newBuilder()
                 .setVideoId(TypeConverter.uuidToUuid(videoid))
                 .setViews(Optional.ofNullable(views).orElse(0L))
                 .build();
     }
+
+    /**
+     * Getter for attribute 'videoid'.
+     *
+     * @return
+     *       current value of 'videoid'
+     */
+    public UUID getVideoid() {
+        return videoid;
+    }
+
+    /**
+     * Setter for attribute 'videoid'.
+     * @param videoid
+     * 		new value for 'videoid '
+     */
+    public void setVideoid(UUID videoid) {
+        this.videoid = videoid;
+    }
+
+    /**
+     * Getter for attribute 'views'.
+     *
+     * @return
+     *       current value of 'views'
+     */
+    public Long getViews() {
+        return views;
+    }
+
+    /**
+     * Setter for attribute 'views'.
+     * @param views
+     * 		new value for 'views '
+     */
+    public void setViews(Long views) {
+        this.views = views;
+    }
+    
+    
 }

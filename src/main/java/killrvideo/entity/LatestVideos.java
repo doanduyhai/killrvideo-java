@@ -14,6 +14,9 @@ import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 @Table(keyspace = Schema.KEYSPACE, name = "latest_videos")
 public class LatestVideos extends AbstractVideoList {
 
+    /** Serial. */
+    private static final long serialVersionUID = -8527565276521920973L;
+
     @PartitionKey
     private String yyyymmdd;
 
@@ -24,38 +27,59 @@ public class LatestVideos extends AbstractVideoList {
     }
 
     public LatestVideos(String yyyymmdd, UUID userid, UUID videoid, String name, String previewImageLocation, Date addedDate) {
+        super(name, previewImageLocation, addedDate, videoid);
         this.yyyymmdd = yyyymmdd;
         this.userid = userid;
-        this.videoid = videoid;
-        this.name = name;
-        this.previewImageLocation = previewImageLocation;
-        this.addedDate = addedDate;
+    }
+    
+    public VideoPreview toVideoPreview() {
+        return VideoPreview
+                .newBuilder()
+                .setAddedDate(TypeConverter.dateToTimestamp(getAddedDate()))
+                .setName(getName())
+                .setPreviewImageLocation(Optional.ofNullable(getPreviewImageLocation()).orElse("N/A"))
+                .setUserId(TypeConverter.uuidToUuid(getUserid()))
+                .setVideoId(TypeConverter.uuidToUuid(getVideoid()))
+                .build();
     }
 
+    /**
+     * Getter for attribute 'yyyymmdd'.
+     *
+     * @return
+     *       current value of 'yyyymmdd'
+     */
     public String getYyyymmdd() {
         return yyyymmdd;
     }
 
+    /**
+     * Setter for attribute 'yyyymmdd'.
+     * @param yyyymmdd
+     * 		new value for 'yyyymmdd '
+     */
     public void setYyyymmdd(String yyyymmdd) {
         this.yyyymmdd = yyyymmdd;
     }
 
+    /**
+     * Getter for attribute 'userid'.
+     *
+     * @return
+     *       current value of 'userid'
+     */
     public UUID getUserid() {
         return userid;
     }
 
+    /**
+     * Setter for attribute 'userid'.
+     * @param userid
+     * 		new value for 'userid '
+     */
     public void setUserid(UUID userid) {
         this.userid = userid;
     }
-
-    public VideoPreview toVideoPreview() {
-        return VideoPreview
-                .newBuilder()
-                .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
-                .setName(name)
-                .setPreviewImageLocation(Optional.ofNullable(previewImageLocation).orElse("N/A"))
-                .setUserId(TypeConverter.uuidToUuid(userid))
-                .setVideoId(TypeConverter.uuidToUuid(videoid))
-                .build();
-    }
+    
+    
 }

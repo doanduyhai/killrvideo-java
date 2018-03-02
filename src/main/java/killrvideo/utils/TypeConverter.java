@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
+import org.apache.tinkerpop.gremlin.structure.Vertex;
+
 import com.google.protobuf.Timestamp;
 
 import killrvideo.common.CommonTypes.TimeUuid;
@@ -44,7 +46,7 @@ public class TypeConverter {
      * @param traversal
      * @return
      */
-    public static String bytecodeToTraversalString(KillrVideoTraversal traversal) {
+    public static String bytecodeToTraversalString(KillrVideoTraversal<Vertex, Vertex> traversal) {
         return org.apache.tinkerpop.gremlin.groovy.jsr223.GroovyTranslator.of("g").translate(traversal.getBytecode());
     }
 }

@@ -189,6 +189,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
     }
 
     @Override
+    @SuppressWarnings({"rawtypes","unchecked"})
     public void getSuggestedForUser(GetSuggestedForUserRequest request, StreamObserver<GetSuggestedForUserResponse> responseObserver) {
 
         LOGGER.debug("Start getting suggested videos for user");
@@ -213,11 +214,8 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
              * number of ratings to sample - the number of global user ratings to sample (smaller means faster traversal)
              * local user ratings to sample - the number of local user ratings to limit by
              */
-            KillrVideoTraversal traversal = killr.users(userIdString)
-                    .recommendByUserRating(100, 4, 250, 10);
-
+            KillrVideoTraversal traversal = killr.users(userIdString).recommendByUserRating(100, 4, 250, 10);
             GraphStatement gStatement = DseGraph.statementFromTraversal(traversal);
-
             LOGGER.debug("Recommend TRAVERSAL is: " + TypeConverter.bytecodeToTraversalString(traversal));
 
             CompletableFuture<GraphResultSet> future = FutureUtils.buildCompletableFuture(dseSession.executeGraphAsync(gStatement));
@@ -268,6 +266,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
      * SuggestedVideos recommendation service which is why this exists here.
      * @param youTubeVideoAdded
      */
+    @SuppressWarnings({"rawtypes", "unchecked"})
     @Subscribe
     public void handle(YouTubeVideoAdded youTubeVideoAdded) {
         final String className = this.getClass().getName();
@@ -370,6 +369,7 @@ public class SuggestedVideosService extends AbstractSuggestedVideoService {
      * @param userRatedVideo
      */
     @Subscribe
+    @SuppressWarnings({"rawtypes", "unchecked"})
     public void handle(UserRatedVideo userRatedVideo) {
         final String className = this.getClass().getName();
 

@@ -1,5 +1,20 @@
 package killrvideo.service;
 
+import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
+
+import java.util.Arrays;
+import java.util.Date;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import javax.annotation.PostConstruct;
+import javax.inject.Inject;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
 import com.datastax.driver.core.BoundStatement;
 import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.PreparedStatement;
@@ -7,38 +22,27 @@ import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.mapping.Mapper;
-import com.datastax.driver.mapping.MappingManager;
-
 import com.google.common.eventbus.EventBus;
+
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-
 import killrvideo.common.CommonTypes;
 import killrvideo.entity.Schema;
 import killrvideo.entity.User;
 import killrvideo.entity.UserCredentials;
 import killrvideo.events.CassandraMutationError;
 import killrvideo.user_management.UserManagementServiceGrpc.AbstractUserManagementService;
-import killrvideo.user_management.UserManagementServiceOuterClass.*;
+import killrvideo.user_management.UserManagementServiceOuterClass.CreateUserRequest;
+import killrvideo.user_management.UserManagementServiceOuterClass.CreateUserResponse;
+import killrvideo.user_management.UserManagementServiceOuterClass.GetUserProfileRequest;
+import killrvideo.user_management.UserManagementServiceOuterClass.GetUserProfileResponse;
+import killrvideo.user_management.UserManagementServiceOuterClass.VerifyCredentialsRequest;
+import killrvideo.user_management.UserManagementServiceOuterClass.VerifyCredentialsResponse;
 import killrvideo.user_management.events.UserManagementEvents.UserCreated;
 import killrvideo.utils.FutureUtils;
 import killrvideo.utils.HashUtils;
 import killrvideo.utils.TypeConverter;
 import killrvideo.validation.KillrVideoInputValidator;
-
-import org.apache.commons.collections4.CollectionUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
-import javax.annotation.PostConstruct;
-import javax.inject.Inject;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
-import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 @Service
 public class UserManagementService extends AbstractUserManagementService {

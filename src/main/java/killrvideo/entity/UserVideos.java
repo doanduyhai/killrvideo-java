@@ -13,43 +13,66 @@ import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 @Table(keyspace = Schema.KEYSPACE, name = "user_videos")
 public class UserVideos extends AbstractVideoList {
 
+    /** Serial. */
+    private static final long serialVersionUID = -4689177834790056936L;
+    
     @PartitionKey
     private UUID userid;
 
-    public UserVideos() {
-    }
+    /**
+     * Deafult Constructor allowing reflection.
+     */
+    public UserVideos() {}
 
+    /**
+     * Constructor without preview.
+     */
     public UserVideos(UUID userid, UUID videoid, String name, Date addedDate) {
-        this.userid = userid;
-        this.videoid = videoid;
-        this.name = name;
-        this.addedDate = addedDate;
+        this(userid, videoid, name, null, addedDate);
     }
 
+    /**
+     * Full set constructor.
+     */
     public UserVideos(UUID userid, UUID videoid, String name, String previewImageLocation, Date addedDate) {
+        super(name, previewImageLocation, addedDate, videoid);
         this.userid = userid;
-        this.videoid = videoid;
-        this.name = name;
-        this.previewImageLocation = previewImageLocation;
-        this.addedDate = addedDate;
     }
 
+    /**
+     * Mapping to generated GPRC beans.
+     */
+    public VideoPreview toVideoPreview() {
+        return VideoPreview
+                .newBuilder()
+                .setAddedDate(TypeConverter.dateToTimestamp(getAddedDate()))
+                .setName(getName())
+                .setPreviewImageLocation(Optional
+                        .ofNullable(previewImageLocation)
+                        .orElse("N/A"))
+                .setUserId(TypeConverter.uuidToUuid(getUserid()))
+                .setVideoId(TypeConverter.uuidToUuid(getVideoid()))
+                .build();
+    }
+
+    /**
+     * Getter for attribute 'userid'.
+     *
+     * @return
+     *       current value of 'userid'
+     */
     public UUID getUserid() {
         return userid;
     }
 
-    public void setUserid(UUID userid) { this.userid = userid; }
-
-    public VideoPreview toVideoPreview() {
-        return VideoPreview
-                .newBuilder()
-                .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
-                .setName(name)
-                .setPreviewImageLocation(Optional
-                        .ofNullable(previewImageLocation)
-                        .orElse("N/A"))
-                .setUserId(TypeConverter.uuidToUuid(userid))
-                .setVideoId(TypeConverter.uuidToUuid(videoid))
-                .build();
+    /**
+     * Setter for attribute 'userid'.
+     * @param userid
+     * 		new value for 'userid '
+     */
+    public void setUserid(UUID userid) {
+        this.userid = userid;
     }
+    
+    
 }

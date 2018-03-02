@@ -1,11 +1,12 @@
 # KillrVideo Java #
 
+[![License Apache2](https://img.shields.io/hexpm/l/plug.svg)](http://www.apache.org/licenses/LICENSE-2.0)
+
 A reference application for Java developers looking to learn more about using [Apache Cassandra][cassandra] and
-[DataStax Enterprise][dse] in their applications and services. Learn more at [KillrVideo].
+[DataStax Enterprise][dse] in their applications and services. Learn more at [Killrvideo].
 
-The current version of KillrVideo Java includes Cassandra, DSE Search, and DSE Graph with [DSL's (Domain Specific Languages)][gremlindsljava].  DSE Graph powers the recommendation engine and all search capabilites are powered with DSE Search.
-
-NOTE: We are now fully switched to using version 1.4.2 of the [DSE java driver][DSE Java driver]!  API docs are [here][DSE Java driver API docs].
+We are now fully switched to use version `1.5.1` of the [DSE java driver][DSE Java driver]!  API docs are [here][DSE Java driver API docs].  
+This version is stable and ready for consumption.
 
 ## Running Locally
 
@@ -19,12 +20,12 @@ running.
 This project will continue to evolve along with Cassandra and you can expect that as Cassandra and the DataStax 
 driver add new features. This sample application will try and provide examples of those. 
 
-I'll gladly accept any pull requests for bug fixes, new features, etc.  and if you have a request for an example 
-that you don't see in the code currently, send me a message [@SonicDMG][twitter] on Twitter or open an issue 
+We will gladly accept any pull requests for bug fixes, new features, etc.  and if you have a request for an example 
+that you don't see in the code currently, send me a message [@SonicDMG][twitter] or [@clunven][clunTwitter] on Twitter or open an issue 
 [here][issues] on GitHub.
 
 ## License
-Copyright 2018 David Gilardi, derived from original work by Duy Hai Doan
+Copyright 2018 David Gilardi, Cedrick Lunven, derived from original work by Duy Hai Doan
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -44,8 +45,8 @@ limitations under the License.
 [getting-started]: https://killrvideo.github.io/getting-started/
 [getting-started-java]: https://killrvideo.github.io/docs/languages/java/
 [twitter]: https://twitter.com/SonicDMG
-[DSE Java driver API docs]: http://docs.datastax.com/en/drivers/java-dse/1.4/
-[DSE Java driver]: https://docs.datastax.com/en/developer/java-driver-dse/1.4/
+[clunTwitter]: https://twitter.com/clunven
+[DSE Java driver API docs]: https://github.com/datastax/java-dse-driver
+[DSE Java driver]: https://docs.datastax.com/en/developer/java-driver-dse/1.5/
 [issues]: https://github.com/KillrVideo/killrvideo-java/issues
 [gremlindsljava]: https://www.datastax.com/dev/blog/gremlin-dsls-in-java-with-dse-graph
-

@@ -1,19 +1,52 @@
 package killrvideo.service;
 
-import com.datastax.driver.core.*;
+import static java.util.stream.Collectors.toList;
+import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
+
+import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+import java.util.Optional;
+import java.util.StringJoiner;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
+
+import javax.annotation.PostConstruct;
+import javax.inject.Inject;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import com.datastax.driver.core.BatchStatement;
+import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.driver.core.PagingState;
+import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.dse.DseSession;
 import com.datastax.driver.mapping.Mapper;
-import com.datastax.driver.mapping.MappingManager;
 import com.datastax.driver.mapping.Result;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.EventBus;
 import com.google.protobuf.ProtocolStringList;
+
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-
 import killrvideo.common.CommonTypes.Uuid;
 import killrvideo.entity.LatestVideos;
 import killrvideo.entity.Schema;
@@ -24,32 +57,19 @@ import killrvideo.utils.FutureUtils;
 import killrvideo.utils.TypeConverter;
 import killrvideo.validation.KillrVideoInputValidator;
 import killrvideo.video_catalog.VideoCatalogServiceGrpc.AbstractVideoCatalogService;
-import killrvideo.video_catalog.VideoCatalogServiceOuterClass.*;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetLatestVideoPreviewsRequest;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetLatestVideoPreviewsResponse;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetUserVideoPreviewsRequest;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetUserVideoPreviewsResponse;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetVideoPreviewsRequest;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetVideoPreviewsResponse;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetVideoRequest;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetVideoResponse;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.SubmitYouTubeVideoRequest;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.SubmitYouTubeVideoResponse;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoLocationType;
+import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 import killrvideo.video_catalog.events.VideoCatalogEvents.YouTubeVideoAdded;
-
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
-import javax.annotation.PostConstruct;
-import javax.inject.Inject;
-import java.text.SimpleDateFormat;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.LongStream;
-
-import static java.util.stream.Collectors.toList;
-import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 @Service
 public class VideoCatalogService extends AbstractVideoCatalogService {
@@ -240,7 +260,7 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
         batchStatement.add(insertLatestVideo);
         batchStatement.setDefaultTimestamp(now.getTime());
 
-        CompletableFuture<ResultSet> insertUserFuture = FutureUtils.buildCompletableFuture(dseSession.executeAsync(batchStatement))
+        FutureUtils.buildCompletableFuture(dseSession.executeAsync(batchStatement))
                 .handle((rs, ex) -> {
                     if (rs != null) {
                         /**
@@ -313,10 +333,6 @@ public class VideoCatalogService extends AbstractVideoCatalogService {
                         LOGGER.warn("Video with id " + videoId + " was not found");
                         responseObserver.onError(Status.NOT_FOUND
                                 .withDescription("Video with id " + videoId + " was not found").asRuntimeException());
-
-                    } else if (ex != null) {
-                        LOGGER.error("Exception getting video : " + mergeStackTrace(ex));
-                        responseObserver.onError(Status.INTERNAL.withCause(ex).asRuntimeException());
 
                     }
                     return video;

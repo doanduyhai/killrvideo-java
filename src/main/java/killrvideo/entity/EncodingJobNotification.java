@@ -10,7 +10,11 @@ import com.datastax.driver.mapping.annotations.ClusteringColumn;
 import com.datastax.driver.mapping.annotations.PartitionKey;
 import com.datastax.driver.mapping.annotations.Table;
 
-
+/**
+ * Pojo representing DTO for table 'comments_by_video'
+ *
+ * @author DataStax evangelist team.
+ */
 @Table(keyspace = KEYSPACE, name = "encoding_job_notifications")
 public class EncodingJobNotification {
 
@@ -45,51 +49,118 @@ public class EncodingJobNotification {
         this.oldstate = oldstate;
     }
 
+    /**
+     * Getter for attribute 'videoid'.
+     *
+     * @return
+     *       current value of 'videoid'
+     */
     public UUID getVideoid() {
         return videoid;
     }
 
+    /**
+     * Setter for attribute 'videoid'.
+     * @param videoid
+     * 		new value for 'videoid '
+     */
     public void setVideoid(UUID videoid) {
         this.videoid = videoid;
     }
 
+    /**
+     * Getter for attribute 'statusDate'.
+     *
+     * @return
+     *       current value of 'statusDate'
+     */
     public Date getStatusDate() {
         return statusDate;
     }
 
+    /**
+     * Setter for attribute 'statusDate'.
+     * @param statusDate
+     * 		new value for 'statusDate '
+     */
     public void setStatusDate(Date statusDate) {
         this.statusDate = statusDate;
     }
 
+    /**
+     * Getter for attribute 'etag'.
+     *
+     * @return
+     *       current value of 'etag'
+     */
     public String getEtag() {
         return etag;
     }
 
+    /**
+     * Setter for attribute 'etag'.
+     * @param etag
+     * 		new value for 'etag '
+     */
     public void setEtag(String etag) {
         this.etag = etag;
     }
 
+    /**
+     * Getter for attribute 'jobid'.
+     *
+     * @return
+     *       current value of 'jobid'
+     */
     public String getJobid() {
         return jobid;
     }
 
+    /**
+     * Setter for attribute 'jobid'.
+     * @param jobid
+     * 		new value for 'jobid '
+     */
     public void setJobid(String jobid) {
         this.jobid = jobid;
     }
 
+    /**
+     * Getter for attribute 'newstate'.
+     *
+     * @return
+     *       current value of 'newstate'
+     */
     public String getNewstate() {
         return newstate;
     }
 
+    /**
+     * Setter for attribute 'newstate'.
+     * @param newstate
+     * 		new value for 'newstate '
+     */
     public void setNewstate(String newstate) {
         this.newstate = newstate;
     }
 
+    /**
+     * Getter for attribute 'oldstate'.
+     *
+     * @return
+     *       current value of 'oldstate'
+     */
     public String getOldstate() {
         return oldstate;
     }
 
+    /**
+     * Setter for attribute 'oldstate'.
+     * @param oldstate
+     * 		new value for 'oldstate '
+     */
     public void setOldstate(String oldstate) {
         this.oldstate = oldstate;
     }
+    
 }
