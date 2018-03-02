@@ -25,7 +25,7 @@ that you don't see in the code currently, send me a message [@SonicDMG][twitter]
 [here][issues] on GitHub.
 
 ## License
-Copyright 2017 David Gilardi, derived from original work by Duy Hai Doan
+Copyright 2018 David Gilardi, Cedrick Lunven, derived from original work by Duy Hai Doan
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -49,4 +49,4 @@ limitations under the License.
 [DSE Java driver API docs]: https://github.com/datastax/java-dse-driver
 [DSE Java driver]: https://docs.datastax.com/en/developer/java-driver-dse/1.5/
 [issues]: https://github.com/KillrVideo/killrvideo-java/issues
-
+[gremlindsljava]: https://www.datastax.com/dev/blog/gremlin-dsls-in-java-with-dse-graph
