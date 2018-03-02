@@ -6,7 +6,7 @@ import java.util.UUID;
 
 import javax.validation.constraints.NotNull;
 
-import org.hibernate.validator.constraints.NotBlank;
+import org.hibernate.validator.constraints.Length;
 
 import com.datastax.driver.mapping.annotations.Column;
 import com.datastax.driver.mapping.annotations.PartitionKey;
@@ -18,7 +18,7 @@ public class UserCredentials {
     @PartitionKey
     private String email;
 
-    @NotBlank
+    @Length(min = 1, message = "password must not be empty")
     @Column(name = "password")
     private String password;
 

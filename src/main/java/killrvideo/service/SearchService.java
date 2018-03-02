@@ -47,7 +47,7 @@ public class SearchService extends AbstractSearchService {
     private String videosTableName;
     private PreparedStatement getQuerySuggestions_getTagsPrepared;
     private PreparedStatement searchVideos_getVideosWithSearchPrepared;
-    private final Set<String> excludeConjunctions = new HashSet<String>() {};
+    private final Set<String> excludeConjunctions = new HashSet<String>();
 
     @PostConstruct
     public void init() {
@@ -185,6 +185,7 @@ public class SearchService extends AbstractSearchService {
                 });
     }
 
+    @SuppressWarnings("serial")
     @Override
     public void getQuerySuggestions(GetQuerySuggestionsRequest request, StreamObserver<GetQuerySuggestionsResponse> responseObserver) {
 

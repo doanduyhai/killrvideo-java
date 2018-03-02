@@ -1,143 +1,167 @@
 package killrvideo.configuration;
 
-import static java.util.stream.Collectors.toList;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.util.Optional;
 
-import java.util.List;
-import java.util.stream.Collectors;
 import javax.inject.Inject;
 
-import com.datastax.driver.dse.graph.GraphProtocol;
-import com.datastax.dse.graph.api.DseGraph;
-import killrvideo.graph.KillrVideoTraversalSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
 
+import com.datastax.driver.core.AuthProvider;
 import com.datastax.driver.dse.DseCluster;
 import com.datastax.driver.dse.DseCluster.Builder;
-import com.datastax.driver.dse.auth.DsePlainTextAuthProvider;
 import com.datastax.driver.dse.DseSession;
+import com.datastax.driver.dse.auth.DsePlainTextAuthProvider;
 import com.datastax.driver.dse.graph.GraphOptions;
-import com.xqbase.etcd4j.EtcdClient;
-
+import com.datastax.driver.dse.graph.GraphProtocol;
 import com.datastax.driver.mapping.MappingManager;
-import killrvideo.utils.ExceptionUtils;
+import com.datastax.dse.graph.api.DseGraph;
+import com.xqbase.etcd4j.EtcdClient;
+import com.xqbase.etcd4j.EtcdClientException;
 
+import killrvideo.graph.KillrVideoTraversalSource;
 
+/**
+ * Connectivity to DSE (cassandra, graph, search, analytics).
+ *
+ * @author DataStax evangelist team.
+ */
 @Configuration
-public class DSEConfiguration {
+public class DseConfiguration {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DSEConfiguration.class);
-
-    private static final String CLUSTER_NAME = "killrvideo";
-    private static final String RECOMMENDATION_GRAPH_NAME = "killrvideo_video_recommendations";
-    private static final Integer GRAPH_TIMEOUT_DEFAULT = 30000;
-
+	/** Internal logger. */
+    private static final Logger LOGGER = LoggerFactory.getLogger(DseConfiguration.class);
+    
+    @Value("${killrvideo.cassandra.clustername: 'killrvideo'}")
+    public String dseClusterName;
+    
+    @Value("${killrvideo.graph.timeout: 30000}")
+    public Integer graphTimeout;
+    
+    @Value("${killrvideo.graph.recommendation.name: 'killrvideo_video_recommendations'}")
+    public String graphRecommendationName;
+    
+    @Value("#{environment.KILLRVIDEO_DSE_USERNAME}")
+    public Optional < String > dseUsername;
+   
+    @Value("#{environment.KILLRVIDEO_DSE_PASSWORD}")
+    public Optional < String > dsePassword;
+    
+    @Value("#{environment.KILLRVIDEO_DOCKER_IP}")
+    public Optional < String > dockerIp;
+    
+    @Value("#{environment.KILLRVIDEO_HOST_IP}")
+    public Optional < String > serverIp;
+    
     @Inject
-    Environment env;
-
-    @Inject
-    EtcdClient etcdClient;
-
-    @Inject
-    private KillrVideoProperties properties;
-
+    private EtcdClient etcdClient;
+    
     @Bean
     public DseSession initializeDSE() {
-        LOGGER.info("Initializing connection to Cassandra");
-        LOGGER.info("ETCD Client is: " + etcdClient.toString());
-
-        try {
-            List<String> cassandraHostsAndPorts = etcdClient.listDir("/killrvideo/services/cassandra")
-                    .stream()
-                    .map(node -> node.value)
-                    .collect(toList());
-
-            final String cassandraHosts = cassandraHostsAndPorts
-                    .stream()
-                    .map(x -> x.split(":")[0])
-                    .collect(Collectors.joining(","));
-
-            final int cassandraPort = Integer.parseInt(
-                    cassandraHostsAndPorts
-                            .get(0)
-                            .split(":")[1]);
-
-            LOGGER.info(String.format("Retrieving cassandra hosts %s and port %s from etcd", cassandraHosts, cassandraPort));
-
-            Builder clusterConfig = new Builder();
-            clusterConfig
-                    .addContactPoints(cassandraHosts)
-                    .withPort(cassandraPort)
-                    .withClusterName(CLUSTER_NAME);
-
-            /**
-             * Check to see if we have username and password from the environment
-             * This is here because we have a dual use scenario.  One for developers and others
-             * who download KillrVideo and run within a local Docker container and the other
-             * who might need (like us for example) to connect KillrVideo up to an external
-             * cluster that requires authentication.
-             */
-            String dseUsername = properties.dseUsername;
-            String dsePassword = properties.dsePassword;
-            if (dseUsername != null && dseUsername.length() > 0 && dsePassword != null) {
-                Integer passwordLength = dsePassword.length();
-                LOGGER.info("Using supplied DSE username: \"" + dseUsername + "\" and password: \"" +
-                        new String(new char[passwordLength]).replace("\0", "*") + "\" from environment variables");
-
-                clusterConfig
-                        .withAuthProvider(new DsePlainTextAuthProvider(dseUsername, dsePassword));
-
-            } else {
-                LOGGER.info("No detected username/password combination was passed in. DSE cluster authentication method was NOT executed.");
-
-            }
-
-            /**
-             * Add option for the graph based recommendation engine
-             */
-            clusterConfig.withGraphOptions(new GraphOptions()
-                    .setGraphName(RECOMMENDATION_GRAPH_NAME)
-                    .setReadTimeoutMillis(GRAPH_TIMEOUT_DEFAULT)
-                    .setGraphSubProtocol(GraphProtocol.GRAPHSON_2_0)
-            );
-
-            DseCluster dseCluster = clusterConfig.build();
-
-            return dseCluster.connect();
-
-        } catch (Throwable e) {
-            LOGGER.error("Exception : " + e.getMessage());
-            LOGGER.error(ExceptionUtils.mergeStackTrace(e));
-
-            throw new IllegalStateException("Cannot find 'killrvideo/services/cassandra' from etcd");
-        }
-
+         LOGGER.info("Initializing connection to DSE Cluster...");
+         long top = System.currentTimeMillis();
+         Builder clusterConfig = new Builder();
+         populateContactPoints(clusterConfig);
+         populateAuthentication(clusterConfig);
+         populateGraphOptions(clusterConfig);
+         
+         DseCluster dseCluster = clusterConfig.build();
+         DseSession dseSession = dseCluster.connect();
+         long timeElapsed = System.currentTimeMillis() - top;
+         LOGGER.info("Connection etablished to DSE Cluster in {} millis.", timeElapsed);
+         return dseSession;
     }
-
+    
     @Bean
-    public Void cassandraNativeClusterProduction() {
-        // Initialize DSE
-        final DseSession dseSession = initializeDSE();
-
-        final MappingManager manager = getMappingManager(dseSession);
-        LOGGER.info(String.format("Creating mapping manager %s", manager));
-
-        final KillrVideoTraversalSource killr = getKillrVideoTraversalSource(dseSession);
-        LOGGER.info(String.format("Creating graph traversal killrvideosource %s", killr));
-
-        return null;
-    }
-
-    @Bean
-    public MappingManager getMappingManager(DseSession session) {
+    public MappingManager initializeMappingManager(DseSession session) {
         return new MappingManager(session);
     }
 
     @Bean
-    public KillrVideoTraversalSource getKillrVideoTraversalSource(DseSession session) {
+    public KillrVideoTraversalSource initialGraphTraversalSource(DseSession session) {
         return DseGraph.traversal(session, KillrVideoTraversalSource.class);
     }
+    
+    /**
+     * Retrieve server name from ETCD and update the contact points.
+     *
+     * @param clusterConfig
+     *      current configuration
+     */
+    private void populateContactPoints(Builder clusterConfig)  {
+        try {
+            etcdClient.listDir("/killrvideo/services/cassandra").stream()
+                      .forEach(node -> asSocketInetAdress(node.value)
+                              .ifPresent(clusterConfig::addContactPointsWithPorts));
+            clusterConfig.withClusterName(dseClusterName);
+        } catch (EtcdClientException e) {
+            /**
+             * If ETCD is not setup yet we must retry.
+             */
+            throw new IllegalArgumentException("Cannot retrieve cassandra cluster information from ETCD", e);
+        }
+    }
+    
+    /**
+     * Check to see if we have username and password from the environment
+     * This is here because we have a dual use scenario.  One for developers and others
+     * who download KillrVideo and run within a local Docker container and the other
+     * who might need (like us for example) to connect KillrVideo up to an external
+     * cluster that requires authentication.
+     */
+    private void populateAuthentication(Builder clusterConfig) {
+        if (dseUsername.isPresent() && dsePassword.isPresent() 
+                                    && dseUsername.get().length() > 0) {
+            AuthProvider cassandraAuthProvider = new DsePlainTextAuthProvider(dseUsername.get(), dsePassword.get());
+            clusterConfig.withAuthProvider(cassandraAuthProvider);
+            String obfuscatedPassword = new String(new char[dsePassword.get().length()]).replace("\0", "*");
+            LOGGER.info("Using supplied DSE username: '%s' and password: '%s' from environment variables", 
+                        dseUsername.get(), obfuscatedPassword);
+        } else {
+            LOGGER.info("DSE cluster authentication method was NOT executed (no username/password provided)");
+        }
+    }
+    
+    private void populateGraphOptions(Builder clusterConfig) {
+        GraphOptions go = new GraphOptions();
+        go.setGraphName(graphRecommendationName);
+        go.setReadTimeoutMillis(graphTimeout);
+        go.setGraphSubProtocol(GraphProtocol.GRAPHSON_2_0);
+        clusterConfig.withGraphOptions(go);
+    }
+    
+    /**
+     * Convert information in ETCD as real adress {@link InetSocketAddress} if possible.
+     *
+     * @param contactPoint
+     *      network node adress information like hostname:port
+     * @return
+     *      java formatted inet adress
+     */
+    private Optional<InetSocketAddress> asSocketInetAdress(String contactPoint) {
+        Optional<InetSocketAddress> target = Optional.empty();
+        try {
+            if (contactPoint != null && contactPoint.length() > 0) {
+                String[] chunks = contactPoint.split(":");
+                if (chunks.length == 2) {
+                    LOGGER.info("Adding node '{}' to the Cassandra cluster definition", contactPoint);
+                    return Optional.of(new InetSocketAddress(InetAddress.getByName(chunks[0]), Integer.parseInt(chunks[1])));
+                }
+            }
+        } catch (NumberFormatException e) {
+            LOGGER.warn("Cannot read contactPoint - "
+                    + "Invalid Port Numer, entry '" + contactPoint + "' will be ignored", e);
+        } catch (UnknownHostException e) {
+            LOGGER.warn("Cannot read contactPoint - "
+                    + "Invalid Hostname, entry '" + contactPoint + "' will be ignored", e);
+        }
+        return target;
+    }
+   
 }

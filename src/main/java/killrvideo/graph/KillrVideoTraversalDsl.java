@@ -1,23 +1,25 @@
 package killrvideo.graph;
 
-import org.apache.tinkerpop.gremlin.process.traversal.P;
-import org.apache.tinkerpop.gremlin.process.traversal.Scope;
-import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
-import org.apache.tinkerpop.gremlin.process.traversal.dsl.GremlinDsl;
-import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
-import org.apache.tinkerpop.gremlin.structure.Edge;
-import org.apache.tinkerpop.gremlin.structure.Vertex;
+import static org.apache.tinkerpop.gremlin.process.traversal.Operator.assign;
+import static org.apache.tinkerpop.gremlin.process.traversal.Order.decr;
+import static org.apache.tinkerpop.gremlin.process.traversal.P.gt;
+import static org.apache.tinkerpop.gremlin.process.traversal.P.gte;
+import static org.apache.tinkerpop.gremlin.process.traversal.P.lt;
+import static org.apache.tinkerpop.gremlin.process.traversal.P.neq;
+import static org.apache.tinkerpop.gremlin.process.traversal.P.within;
+import static org.apache.tinkerpop.gremlin.structure.Column.keys;
+import static org.apache.tinkerpop.gremlin.structure.Column.values;
 
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 
-import static killrvideo.graph.KillrVideoTraversalConstants.*;
-import static org.apache.tinkerpop.gremlin.process.traversal.Operator.assign;
-import static org.apache.tinkerpop.gremlin.process.traversal.Order.decr;
-import static org.apache.tinkerpop.gremlin.process.traversal.P.*;
-import static org.apache.tinkerpop.gremlin.structure.Column.keys;
-import static org.apache.tinkerpop.gremlin.structure.Column.values;
+import org.apache.tinkerpop.gremlin.process.traversal.P;
+import org.apache.tinkerpop.gremlin.process.traversal.Scope;
+import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.GremlinDsl;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
+import org.apache.tinkerpop.gremlin.structure.Vertex;
 
 /**
  * Define our KillrVideo DSL (Domain Specific Language)
@@ -44,7 +46,7 @@ import static org.apache.tinkerpop.gremlin.structure.Column.values;
  * name of the class that contains those DSL-based start steps.
  */
 @GremlinDsl(traversalSource = "killrvideo.graph.KillrVideoTraversalSourceDsl")
-public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E> {
+public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>, KillrVideoTraversalConstants {
 
     /**
      * Calls {@link #rated(int, int)} with both arguments as zero.
@@ -85,7 +87,8 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
      * @param rating
      * @return
      */
-    public default GraphTraversal<S, Vertex> rated(UUID userId, Integer rating) {
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+	public default GraphTraversal<S, Vertex> rated(UUID userId, Integer rating) {
         if (null == userId)
             throw new IllegalArgumentException("The userId must not be null");
         if (rating < 1 || rating > 5)
@@ -95,7 +98,6 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
          * As mentioned in the javadocs this step assumes an incoming "video" vertex. it is immediately labelled as
          * "^video". the addition of the caret prefix has no meaning except to provide for a unique labelling space
          * within the DSL itself.
-         *
          * Also note there is no check to see if the rating already exists for the video, user, and rating passed in.
          * This is because ratings have multiple cardinality and we can have as many ratings from a user for a video
          * as we want, no check needed.
@@ -130,7 +132,8 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
      * @param userId
      * @return
      */
-    public default GraphTraversal<S, Vertex> user(UUID userId) {
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+	public default GraphTraversal<S, Vertex> user(UUID userId) {
         return (KillrVideoTraversal) __.V().has(VERTEX_USER, KEY_USER_ID, userId);
     }
 
@@ -141,7 +144,8 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
      * @param userId
      * @return
      */
-    public default GraphTraversal<S, Vertex> uploaded(UUID userId) {
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+	public default GraphTraversal<S, Vertex> uploaded(UUID userId) {
         if (null == userId)
             throw new IllegalArgumentException("The userId must not be null");
         /**
@@ -174,7 +178,8 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
      * @param tagged_date
      * @return
      */
-    public default GraphTraversal<S, Vertex> tag(String name, Date tagged_date) {
+    @SuppressWarnings("unchecked")
+	public default GraphTraversal<S, Vertex> tag(String name, Date tagged_date) {
         if (null == name || name.isEmpty())
             throw new IllegalArgumentException("The name of the tag must not be null or empty");
         if (null == tagged_date)
@@ -195,7 +200,8 @@ public interface KillrVideoTraversalDsl<S, E> extends GraphTraversal.Admin<S, E>
      * @param tagged_date
      * @return
      */
-    public default GraphTraversal<S, Vertex> taggedWith(String name, Date tagged_date) {
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+	public default GraphTraversal<S, Vertex> taggedWith(String name, Date tagged_date) {
         /**
          * no validation here as it would just duplicate what is happening in tag(). note the use of the
          * cast to KillrVideoTraversal. in this case, we want to use a DSL step within the DSL itself, but we want to

@@ -3,17 +3,15 @@ package killrvideo.grpc;
 import static java.lang.String.format;
 
 import java.io.IOException;
-import java.util.List;
+
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
-import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.xqbase.etcd4j.EtcdClient;
 
@@ -21,25 +19,53 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerServiceDefinition;
 import killrvideo.comments.CommentsServiceGrpc;
-import killrvideo.configuration.KillrVideoProperties;
+import killrvideo.configuration.KillrVideoConfiguration;
 import killrvideo.events.CassandraMutationErrorHandler;
 import killrvideo.ratings.RatingsServiceGrpc;
 import killrvideo.search.SearchServiceGrpc;
-import killrvideo.service.*;
+import killrvideo.service.CommentService;
+import killrvideo.service.RatingsService;
+import killrvideo.service.SearchService;
+import killrvideo.service.StatisticsService;
+import killrvideo.service.SuggestedVideosService;
+import killrvideo.service.UploadsService;
+import killrvideo.service.UserManagementService;
+import killrvideo.service.VideoCatalogService;
 import killrvideo.statistics.StatisticsServiceGrpc;
 import killrvideo.suggested_videos.SuggestedVideoServiceGrpc;
 import killrvideo.uploads.UploadsServiceGrpc;
 import killrvideo.user_management.UserManagementServiceGrpc;
 import killrvideo.video_catalog.VideoCatalogServiceGrpc;
 
+/**
+ * Startup a GRPC server on expected port and register all services.
+ *
+ * @author DataStax evangelist team.
+ */
 @Component
 public class GrpcServer {
 
+    /** Some logger. */
     private static final Logger LOGGER = LoggerFactory.getLogger(GrpcServer.class);
 
+    /**
+     * All configuration parameters. 
+     */
     @Inject
-    Environment env;
-
+    private KillrVideoConfiguration config;
+    
+    /**
+     * Connectivity to ETCD Service discovery.
+     */
+    @Inject
+    private EtcdClient etcdClient;
+    
+    /**
+     * Communication channel between service, for now GUAVA inmemory messaging.
+     */
+    @Inject
+    private EventBus eventBus;
+    
     @Inject
     CommentService commentService;
 
@@ -62,28 +88,23 @@ public class GrpcServer {
     VideoCatalogService videoCatalogService;
 
     @Inject
-    EventBus eventBus;
-
-    @Inject
     SuggestedVideosService suggestedVideosService;
 
     @Inject
-    CassandraMutationErrorHandler cassandraMutationErrorHandler;
+    CassandraMutationErrorHandler cassandraMutationErrorHandler;   
 
-    @Inject
-    EtcdClient etcdClient;
-
-    @Inject
-    KillrVideoProperties properties;
-
+    /**
+     * GRPC Server to set up.
+     */
     private Server server;
-
+    
+    private String applicationUID;
+    
     @PostConstruct
     public void start() throws Exception {
-
-        LOGGER.info("Try starting Grpc Server ");
-
-        final int port = Integer.parseInt(env.getProperty("killrvideo.server.port"));
+        applicationUID = config.getApplicationName()  + ":" + config.getApplicationInstanceId();
+        
+        LOGGER.info("Starting Grpc Server on port: '{}'", config.getApplicationPort());
         final ServerServiceDefinition commentService = CommentsServiceGrpc.bindService(this.commentService);
         final ServerServiceDefinition ratingService = RatingsServiceGrpc.bindService(this.ratingService);
         final ServerServiceDefinition statisticsService = StatisticsServiceGrpc.bindService(this.statisticsService);
@@ -92,9 +113,8 @@ public class GrpcServer {
         final ServerServiceDefinition userManagementService = UserManagementServiceGrpc.bindService(this.userManagementService);
         final ServerServiceDefinition videoCatalogService = VideoCatalogServiceGrpc.bindService(this.videoCatalogService);
         final ServerServiceDefinition searchService = SearchServiceGrpc.bindService(this.searchService);
-
         server = ServerBuilder
-                .forPort(port)
+                .forPort(config.getApplicationPort())
                 .addService(commentService)
                 .addService(ratingService)
                 .addService(statisticsService)
@@ -104,15 +124,15 @@ public class GrpcServer {
                 .addService(videoCatalogService)
                 .addService(searchService)
                 .build();
-
-        LOGGER.info("Starting Grpc Server on port " + port);
-
+       
         eventBus.register(suggestedVideosService);
         eventBus.register(cassandraMutationErrorHandler);
 
-        registerServicesToEtcd(Lists.newArrayList(commentService, ratingService, statisticsService,
-                suggestedVideoService, uploadsService, userManagementService, videoCatalogService,
-                searchService));
+        registerServicesToEtcd(
+                commentService, ratingService, statisticsService,
+                suggestedVideoService, uploadsService, userManagementService, 
+                videoCatalogService, searchService);
+        
 
         /**
          * Declare a shutdown hook otherwise the JVM
@@ -136,23 +156,27 @@ public class GrpcServer {
         server.shutdown();
     }
 
-    private void registerServicesToEtcd(List<ServerServiceDefinition> serviceDefinitions) throws IOException {
-        final String uniqueId = env.getProperty("killrvideo.application.name") + ":" + env.getProperty("killrvideo.application.instance.id");
-
-        final String port = env.getProperty("killrvideo.server.port");
-
-        LOGGER.info("Registering Grpc services to etcd");
-
+    /**
+     * Enter information into ETCD.
+     *
+     * @param serviceDefinitions
+     *          services definitions from GRPC
+     * @throws IOException
+     *          exception when accessing ETCD
+     */
+    private void registerServicesToEtcd(ServerServiceDefinition... serviceDefinitions) throws IOException {
+        final String applicationAdress = format("%s:%d", config.getApplicationHost(), config.getApplicationPort());
         for (ServerServiceDefinition service : serviceDefinitions) {
-
-            final String serviceUrl = format("/killrvideo/services/%s/%s", shortenServiceName(service.getServiceDescriptor().getName()), uniqueId);
-
-            LOGGER.info(format("Registering service : %s", serviceUrl));
-
-            etcdClient.set(serviceUrl, format("%s:%s", properties.serverIp, port));
+            final String shortName  = shortenServiceName(service.getServiceDescriptor().getName());
+            final String serviceKey = format("/killrvideo/services/%s/%s", shortName, applicationUID);
+            LOGGER.info("Registering service : '{}' with '{}'", serviceKey, applicationAdress);
+            etcdClient.set(serviceKey, applicationAdress);
         }
     }
-
+    
+    /**
+     * Remove special caracters.
+     */
     private String shortenServiceName(String fullServiceName) {
         return fullServiceName.replaceAll(".*\\.([^.]+)", "$1");
     }

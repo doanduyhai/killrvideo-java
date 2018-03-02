@@ -5,7 +5,7 @@ import java.util.UUID;
 
 import javax.validation.constraints.NotNull;
 
-import org.hibernate.validator.constraints.NotBlank;
+import org.hibernate.validator.constraints.Length;
 
 import com.datastax.driver.mapping.annotations.Column;
 import com.datastax.driver.mapping.annotations.PartitionKey;
@@ -20,15 +20,15 @@ public class User {
     @PartitionKey
     private UUID userid;
 
-    @NotBlank
+    @Length(min = 1, message = "firstName must not be empty")
     @Column
     private String firstname;
 
-    @NotBlank
+    @Length(min = 1, message = "lastname must not be empty")
     @Column
     private String lastname;
 
-    @NotBlank
+    @Length(min = 1, message = "email must not be empty")
     @Column
     private String email;
 
@@ -47,46 +47,6 @@ public class User {
         this.createdAt = createdAt;
     }
 
-    public UUID getUserid() {
-        return userid;
-    }
-
-    public void setUserid(UUID userid) {
-        this.userid = userid;
-    }
-
-    public String getFirstname() {
-        return firstname;
-    }
-
-    public void setFirstname(String firstname) {
-        this.firstname = firstname;
-    }
-
-    public String getLastname() {
-        return lastname;
-    }
-
-    public void setLastname(String lastname) {
-        this.lastname = lastname;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public Date getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(Date createdAt) {
-        this.createdAt = createdAt;
-    }
-
     public UserProfile toUserProfile() {
         return UserProfile.newBuilder()
                 .setEmail(email)
@@ -95,4 +55,101 @@ public class User {
                 .setUserId(TypeConverter.uuidToUuid(userid))
                 .build();
     }
+
+    /**
+     * Getter for attribute 'userid'.
+     *
+     * @return
+     *       current value of 'userid'
+     */
+    public UUID getUserid() {
+        return userid;
+    }
+
+    /**
+     * Setter for attribute 'userid'.
+     * @param userid
+     * 		new value for 'userid '
+     */
+    public void setUserid(UUID userid) {
+        this.userid = userid;
+    }
+
+    /**
+     * Getter for attribute 'firstname'.
+     *
+     * @return
+     *       current value of 'firstname'
+     */
+    public String getFirstname() {
+        return firstname;
+    }
+
+    /**
+     * Setter for attribute 'firstname'.
+     * @param firstname
+     * 		new value for 'firstname '
+     */
+    public void setFirstname(String firstname) {
+        this.firstname = firstname;
+    }
+
+    /**
+     * Getter for attribute 'lastname'.
+     *
+     * @return
+     *       current value of 'lastname'
+     */
+    public String getLastname() {
+        return lastname;
+    }
+
+    /**
+     * Setter for attribute 'lastname'.
+     * @param lastname
+     * 		new value for 'lastname '
+     */
+    public void setLastname(String lastname) {
+        this.lastname = lastname;
+    }
+
+    /**
+     * Getter for attribute 'email'.
+     *
+     * @return
+     *       current value of 'email'
+     */
+    public String getEmail() {
+        return email;
+    }
+
+    /**
+     * Setter for attribute 'email'.
+     * @param email
+     * 		new value for 'email '
+     */
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    /**
+     * Getter for attribute 'createdAt'.
+     *
+     * @return
+     *       current value of 'createdAt'
+     */
+    public Date getCreatedAt() {
+        return createdAt;
+    }
+
+    /**
+     * Setter for attribute 'createdAt'.
+     * @param createdAt
+     * 		new value for 'createdAt '
+     */
+    public void setCreatedAt(Date createdAt) {
+        this.createdAt = createdAt;
+    }
+    
+    
 }

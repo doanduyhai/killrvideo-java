@@ -111,7 +111,7 @@ public class RatingsService extends AbstractRatingsService {
          * prepared, the first one I did manually in a more traditional sense and in the second one the
          * mapper will prepare the statement for you automagically.
          */
-        CompletableFuture<Void> rateVideoFuture = CompletableFuture
+        CompletableFuture
                 .allOf(
                         FutureUtils.buildCompletableFuture(dseSession.executeAsync(counterUpdateStatement)),
                         FutureUtils.buildCompletableFuture(videoRatingByUserMapper

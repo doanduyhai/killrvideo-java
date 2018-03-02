@@ -8,22 +8,25 @@ import java.util.UUID;
 
 import javax.validation.constraints.NotNull;
 
-import org.hibernate.validator.constraints.NotBlank;
+import org.hibernate.validator.constraints.Length;
 
 import com.datastax.driver.mapping.annotations.Column;
 import com.datastax.driver.mapping.annotations.PartitionKey;
 import com.datastax.driver.mapping.annotations.Table;
-import killrvideo.utils.EmptyCollectionIfNull;
 
+import killrvideo.search.SearchServiceOuterClass.SearchResultsVideoPreview;
+import killrvideo.suggested_videos.SuggestedVideosService.SuggestedVideoPreview;
+import killrvideo.utils.EmptyCollectionIfNull;
 import killrvideo.utils.TypeConverter;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.GetVideoResponse;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoLocationType;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
-import killrvideo.search.SearchServiceOuterClass.SearchResultsVideoPreview;
-import killrvideo.suggested_videos.SuggestedVideosService.SuggestedVideoPreview;
 
 @Table(keyspace = KEYSPACE, name = "videos")
-public class Video extends AbstractVideo{
+public class Video extends AbstractVideo {
+
+    /** Serial. */
+    private static final long serialVersionUID = 7035802926837646137L;
 
     @PartitionKey
     private UUID videoid;
@@ -32,11 +35,11 @@ public class Video extends AbstractVideo{
     @Column
     private UUID userid;
 
-    @NotBlank
+    @Length(min = 1, message = "description must not be empty")
     @Column
     private String description;
 
-    @NotBlank
+    @Length(min = 1, message = "location must not be empty")
     @Column
     private String location;
 
@@ -51,94 +54,39 @@ public class Video extends AbstractVideo{
     @Column(name = "added_date")
     private Date addedDate;
 
-    public Video() {
-    }
-
+    /**
+     * Default Constructor allowing reflection.
+     */
+    public Video() {}
+    
+    /**
+     * Constructor wihout location nor preview.
+     */
     public Video(UUID videoid, UUID userid, String name, String description, int locationType, Set<String> tags, Date addedDate) {
-        this.videoid = videoid;
-        this.userid = userid;
-        this.name = name;
-        this.description = description;
-        this.locationType = locationType;
-        this.tags = tags;
-        this.addedDate = addedDate;
+        this(videoid, userid, name, description, null, locationType, null, tags, addedDate);
     }
 
+    /**
+     * All attributes constructor.
+     */
     public Video(UUID videoid, UUID userid, String name, String description, String location, int locationType, String previewImageLocation, Set<String> tags, Date addedDate) {
+        super(name, previewImageLocation);
         this.videoid = videoid;
         this.userid = userid;
-        this.name = name;
         this.description = description;
         this.location = location;
         this.locationType = locationType;
-        this.previewImageLocation = previewImageLocation;
         this.tags = tags;
         this.addedDate = addedDate;
     }
-
-    public UUID getVideoid() {
-        return videoid;
-    }
-
-    public void setVideoid(UUID videoid) {
-        this.videoid = videoid;
-    }
-
-    public UUID getUserid() {
-        return userid;
-    }
-
-    public void setUserid(UUID userid) {
-        this.userid = userid;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public String getLocation() {
-        return location;
-    }
-
-    public void setLocation(String location) {
-        this.location = location;
-    }
-
-    public int getLocationType() {
-        return locationType;
-    }
-
-    public void setLocationType(int locationType) {
-        this.locationType = locationType;
-    }
-
-    public Set<String> getTags() {
-        return tags;
-    }
-
-    public void setTags(Set<String> tags) {
-        this.tags = tags;
-    }
-
-    public Date getAddedDate() {
-        return addedDate;
-    }
-
-    public void setAddedDate(Date addedDate) {
-        this.addedDate = addedDate;
-    }
-
+    
     public GetVideoResponse toVideoResponse() {
         final GetVideoResponse videoResponse = GetVideoResponse
                 .newBuilder()
                 .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
                 .setDescription(description)
                 .setLocation(location)
-                .setLocationType(VideoLocationType.valueOf(locationType))
+                .setLocationType(VideoLocationType.forNumber(getLocationType()))
                 .setName(name)
                 .setUserId(TypeConverter.uuidToUuid(userid))
                 .setVideoId(TypeConverter.uuidToUuid(videoid))
@@ -179,4 +127,139 @@ public class Video extends AbstractVideo{
                 .setUserId(TypeConverter.uuidToUuid(userid))
                 .build();
     }
+
+    /**
+     * Getter for attribute 'videoid'.
+     *
+     * @return
+     *       current value of 'videoid'
+     */
+    public UUID getVideoid() {
+        return videoid;
+    }
+
+    /**
+     * Setter for attribute 'videoid'.
+     * @param videoid
+     * 		new value for 'videoid '
+     */
+    public void setVideoid(UUID videoid) {
+        this.videoid = videoid;
+    }
+
+    /**
+     * Getter for attribute 'userid'.
+     *
+     * @return
+     *       current value of 'userid'
+     */
+    public UUID getUserid() {
+        return userid;
+    }
+
+    /**
+     * Setter for attribute 'userid'.
+     * @param userid
+     * 		new value for 'userid '
+     */
+    public void setUserid(UUID userid) {
+        this.userid = userid;
+    }
+
+    /**
+     * Getter for attribute 'description'.
+     *
+     * @return
+     *       current value of 'description'
+     */
+    public String getDescription() {
+        return description;
+    }
+
+    /**
+     * Setter for attribute 'description'.
+     * @param description
+     * 		new value for 'description '
+     */
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    /**
+     * Getter for attribute 'location'.
+     *
+     * @return
+     *       current value of 'location'
+     */
+    public String getLocation() {
+        return location;
+    }
+
+    /**
+     * Setter for attribute 'location'.
+     * @param location
+     * 		new value for 'location '
+     */
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
+    /**
+     * Getter for attribute 'locationType'.
+     *
+     * @return
+     *       current value of 'locationType'
+     */
+    public int getLocationType() {
+        return locationType;
+    }
+
+    /**
+     * Setter for attribute 'locationType'.
+     * @param locationType
+     * 		new value for 'locationType '
+     */
+    public void setLocationType(int locationType) {
+        this.locationType = locationType;
+    }
+
+    /**
+     * Getter for attribute 'tags'.
+     *
+     * @return
+     *       current value of 'tags'
+     */
+    public Set<String> getTags() {
+        return tags;
+    }
+
+    /**
+     * Setter for attribute 'tags'.
+     * @param tags
+     * 		new value for 'tags '
+     */
+    public void setTags(Set<String> tags) {
+        this.tags = tags;
+    }
+
+    /**
+     * Getter for attribute 'addedDate'.
+     *
+     * @return
+     *       current value of 'addedDate'
+     */
+    public Date getAddedDate() {
+        return addedDate;
+    }
+
+    /**
+     * Setter for attribute 'addedDate'.
+     * @param addedDate
+     * 		new value for 'addedDate '
+     */
+    public void setAddedDate(Date addedDate) {
+        this.addedDate = addedDate;
+    }
+    
+    
 }
