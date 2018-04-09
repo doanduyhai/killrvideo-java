@@ -1,5 +1,0 @@
-INSERT INTO killrvideo.videos_by_tag(tag, videoid, userid, added_date, tagged_date, preview_image_location, name) VALUES('sci-fi', ${videoid1}, ${userid}, toTimestamp(now()), toTimestamp(now()), 'http://xxx', 'Matrix');
-INSERT INTO killrvideo.videos_by_tag(tag, videoid, userid, added_date, tagged_date, preview_image_location, name) VALUES('sci-fi', ${videoid2}, ${userid}, toTimestamp(now()), toTimestamp(now()), 'http://xxx', 'Equilibrium');
-INSERT INTO killrvideo.videos_by_tag(tag, videoid, userid, added_date, tagged_date, preview_image_location, name) VALUES('sci-fi', ${videoid3}, ${userid}, toTimestamp(now()), toTimestamp(now()), 'http://xxx', 'PayCheck');
-INSERT INTO killrvideo.videos_by_tag(tag, videoid, userid, added_date, tagged_date, preview_image_location, name) VALUES('sci-fi', ${videoid4}, ${userid}, toTimestamp(now()), toTimestamp(now()), 'http://xxx', 'Dark City');
-INSERT INTO killrvideo.videos_by_tag(tag, videoid, userid, added_date, tagged_date, preview_image_location, name) VALUES('sci-fi', ${videoid5}, ${userid}, toTimestamp(now()), toTimestamp(now()), 'http://xxx', 'Limitless');

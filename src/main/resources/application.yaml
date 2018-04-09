@@ -1,0 +1,36 @@
+spring:
+  main:
+    banner-mode: "off"
+        
+# Support keys for our application
+
+# Custom 'killrvideo' keys App
+killrvideo:
+  application: 
+    name: killrvideo
+    instance: 
+      id: 0
+  
+  grpc-server: 
+    port: 8899
+  
+  threadpool:
+    minThreads: 5
+    maxThreads: 10
+    ttlThreads: 60
+    queueSize: 1000
+  
+  graph:
+    timeout: 3000
+    recommendation.name: killrvideo_video_recommendations
+  
+  etcd:
+    host: 10.0.75.1
+    port: 2379
+    
+  cassandra:
+    clustername: killrvideo
+    mutation-error-log: /tmp/killrvideo-mutation-errors.log
+    maxNumberOfTries: 10
+    delayBetweenTries: 2
+    

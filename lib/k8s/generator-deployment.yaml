@@ -1,0 +1,33 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert
+    kompose.version: 1.10.0 ()
+  creationTimestamp: null
+  labels:
+    io.kompose.service: generator
+  name: generator
+spec:
+  replicas: 1
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        io.kompose.service: generator
+    spec:
+      containers:
+      - env:
+        - name: KILLRVIDEO_CASSANDRA_REPLICATION
+        - name: KILLRVIDEO_DSE_PASSWORD
+        - name: KILLRVIDEO_DSE_USERNAME
+        - name: KILLRVIDEO_ETCD
+          value: etcd:2379
+        - name: KILLRVIDEO_LOGGING_LEVEL
+        - name: NODE_ENV
+        image: killrvideo/killrvideo-generator:1.2.5
+        name: generator
+        resources: {}
+      restartPolicy: Always
+status: {}

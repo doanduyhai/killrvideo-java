@@ -6,9 +6,25 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
-
+/**
+ * Utility class to work on Futures.
+ * 
+ * @author DataStax evangelist team.
+ */
 public class FutureUtils {
 
+    /**
+     * Hide constructor.
+     */
+    private FutureUtils() {}
+    
+    /**
+     * This is a utility class that converts ListenableFuture objects into CompletableFuture,
+     * creates a callback, and returns CompletableFuture
+     * @param listenableFuture
+     * @param <T>
+     * @return CompletableFuture
+     */
     public static <T> CompletableFuture<T> buildCompletableFuture(final ListenableFuture<T> listenableFuture) {
 
         //create an instance of CompletableFuture

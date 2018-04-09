@@ -4,15 +4,23 @@ import java.util.Date;
 import java.util.Optional;
 import java.util.UUID;
 
-import info.archinnov.achilles.annotations.Column;
-import info.archinnov.achilles.annotations.PartitionKey;
-import info.archinnov.achilles.annotations.Table;
+import com.datastax.driver.mapping.annotations.Column;
+import com.datastax.driver.mapping.annotations.PartitionKey;
+import com.datastax.driver.mapping.annotations.Table;
+
 import killrvideo.utils.TypeConverter;
-import killrvideo.video_catalog.VideoCatalogServiceOuterClass;
 import killrvideo.video_catalog.VideoCatalogServiceOuterClass.VideoPreview;
 
-@Table(keyspace = Schema.KEYSPACE, table = "latest_videos")
-public class LatestVideos extends AbstractVideoList{
+/**
+ * Pojo representing DTO for table 'latest_videos'
+ *
+ * @author DataStax evangelist team.
+ */
+@Table(keyspace = Schema.KEYSPACE, name = Schema.TABLENAME_LATEST_VIDEOS)
+public class LatestVideos extends AbstractVideoList {
+
+    /** Serial. */
+    private static final long serialVersionUID = -8527565276521920973L;
 
     @PartitionKey
     private String yyyymmdd;
@@ -20,42 +28,71 @@ public class LatestVideos extends AbstractVideoList{
     @Column
     private UUID userid;
 
-    public LatestVideos() {
-    }
+    /**
+     * Default constructor.
+     */
+    public LatestVideos() {}
 
+    /**
+     * Constructor with all parameters.
+     */
     public LatestVideos(String yyyymmdd, UUID userid, UUID videoid, String name, String previewImageLocation, Date addedDate) {
+        super(name, previewImageLocation, addedDate, videoid);
         this.yyyymmdd = yyyymmdd;
         this.userid = userid;
-        this.videoid = videoid;
-        this.name = name;
-        this.previewImageLocation = previewImageLocation;
-        this.addedDate = addedDate;
+    }
+    
+    /**
+     * Mapping to GRPC generated classes.
+     */
+    public VideoPreview toVideoPreview() {
+        return VideoPreview
+                .newBuilder()
+                .setAddedDate(TypeConverter.dateToTimestamp(getAddedDate()))
+                .setName(getName())
+                .setPreviewImageLocation(Optional.ofNullable(getPreviewImageLocation()).orElse("N/A"))
+                .setUserId(TypeConverter.uuidToUuid(getUserid()))
+                .setVideoId(TypeConverter.uuidToUuid(getVideoid()))
+                .build();
     }
 
+    /**
+     * Getter for attribute 'yyyymmdd'.
+     *
+     * @return
+     *       current value of 'yyyymmdd'
+     */
     public String getYyyymmdd() {
         return yyyymmdd;
     }
 
+    /**
+     * Setter for attribute 'yyyymmdd'.
+     * @param yyyymmdd
+     * 		new value for 'yyyymmdd '
+     */
     public void setYyyymmdd(String yyyymmdd) {
         this.yyyymmdd = yyyymmdd;
     }
 
+    /**
+     * Getter for attribute 'userid'.
+     *
+     * @return
+     *       current value of 'userid'
+     */
     public UUID getUserid() {
         return userid;
     }
 
+    /**
+     * Setter for attribute 'userid'.
+     * @param userid
+     * 		new value for 'userid '
+     */
     public void setUserid(UUID userid) {
         this.userid = userid;
     }
-
-    public VideoPreview toVideoPreview() {
-        return VideoPreview
-                .newBuilder()
-                .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
-                .setName(name)
-                .setPreviewImageLocation(Optional.ofNullable(previewImageLocation).orElse("N/A"))
-                .setUserId(TypeConverter.uuidToUuid(userid))
-                .setVideoId(TypeConverter.uuidToUuid(videoid))
-                .build();
-    }
+    
+    
 }

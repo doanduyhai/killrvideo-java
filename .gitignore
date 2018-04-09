@@ -16,14 +16,13 @@ release.properties
 *.ipr
 *.iws
 .idea
-.idea
 */.idea/*
 *~
 .cache
 .springBeans
 test-output
-target
-target/*
 .DS_Store
 *.swp
 .java-version
+.env
+dse-data/

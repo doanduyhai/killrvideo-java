@@ -2,6 +2,7 @@ package killrvideo.events;
 
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
+
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
@@ -12,21 +13,27 @@ import org.springframework.stereotype.Component;
 
 import com.google.common.eventbus.Subscribe;
 
-import killrvideo.configuration.KillrVideoProperties;
+import killrvideo.configuration.KillrVideoConfiguration;
 
+/**
+ * Catch exceptions and create a {@link CassandraMutationError} in EventBus.
+ *
+ * @author DataStax evangelist team.
+ */
 @Component
 public class CassandraMutationErrorHandler {
 
+    /** LOGGER for the class. */
     private static Logger LOGGER = LoggerFactory.getLogger(CassandraMutationErrorHandler.class);
 
     @Inject
-    KillrVideoProperties properties;
+    private KillrVideoConfiguration config;
 
     private PrintWriter errorLogFile;
 
     @PostConstruct
     public void openErrorLogFile() throws FileNotFoundException {
-        this.errorLogFile = new PrintWriter(properties.mutationErrorLog);
+        this.errorLogFile = new PrintWriter(config.getMutationErrorLog());
     }
 
     /**
@@ -39,10 +46,8 @@ public class CassandraMutationErrorHandler {
      */
     @Subscribe
     public void handle(CassandraMutationError mutationError) {
-
         final String errorLog = mutationError.buildErrorLog();
         LOGGER.debug(String.format("Recording mutation error %s", errorLog));
-
         errorLogFile.append(errorLog).append("\n***********************\n");
         errorLogFile.flush();
     }
