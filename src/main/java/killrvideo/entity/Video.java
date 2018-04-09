@@ -13,6 +13,7 @@ import com.datastax.driver.mapping.annotations.PartitionKey;
 import com.datastax.driver.mapping.annotations.Table;
 
 import killrvideo.search.SearchServiceOuterClass.SearchResultsVideoPreview;
+import killrvideo.search.SearchServiceOuterClass.SearchResultsVideoPreview.Builder;
 import killrvideo.suggested_videos.SuggestedVideosService.SuggestedVideoPreview;
 import killrvideo.utils.EmptyCollectionIfNull;
 import killrvideo.utils.TypeConverter;
@@ -119,14 +120,13 @@ public class Video extends AbstractVideo {
      * Mapping to generated GPRC beans (Search result special).
      */
     public SearchResultsVideoPreview toResultVideoPreview() {
-        return SearchResultsVideoPreview
-                .newBuilder()
-                .setAddedDate(TypeConverter.dateToTimestamp(addedDate))
-                .setName(name)
-                .setPreviewImageLocation(previewImageLocation)
-                .setUserId(TypeConverter.uuidToUuid(userid))
-                .setVideoId(TypeConverter.uuidToUuid(videoid))
-                .build();
+    	Builder builder = SearchResultsVideoPreview.newBuilder();
+    	builder.setName(name);
+    	if (previewImageLocation != null)  builder.setPreviewImageLocation(previewImageLocation);
+    	if (userid != null)    			   builder.setUserId(TypeConverter.uuidToUuid(userid));
+    	if (videoid != null)   			   builder.setVideoId(TypeConverter.uuidToUuid(videoid));
+    	if (addedDate != null) 			   builder.setAddedDate(TypeConverter.dateToTimestamp(addedDate));
+        return builder.build();
     }
 
     /**
