@@ -80,20 +80,14 @@ public class SearchService extends SearchServiceImplBase {
                         .where(QueryBuilder.eq("solr_query", QueryBuilder.bindMarker()))
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_ONE);
 
-        searchVideos_getVideosWithSearchPrepared = getQuerySuggestions_getTagsPrepared;
-        
-        /*
-         *  Warning at startup because initialized twice the same query
-         *  
-               dseSession.prepare(
+        searchVideos_getVideosWithSearchPrepared = dseSession.prepare(
                 QueryBuilder
-                        .select()
-                        .all()
-                        .from(Schema.KEYSPACE, videosTableName)
-                        .where(QueryBuilder.eq("solr_query", QueryBuilder.bindMarker()))
+                .select()
+                .all()
+                .from(Schema.KEYSPACE, videosTableName)
+                .where(QueryBuilder.eq("solr_query", QueryBuilder.bindMarker()))
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_ONE);
-        */
-
+        
         /**
          * Create a set of sentence conjunctions and other "undesirable"
          * words we will use later to exclude from search results
@@ -161,8 +155,8 @@ public class SearchService extends SearchServiceImplBase {
                 .append(requestQuery).append("\", \"paging\":\"driver\"}");
 
         LOGGER.debug("searchVideos() solr_query is : " + solrQuery);
-        BoundStatement statement = searchVideos_getVideosWithSearchPrepared.bind()
-                .setString("solr_query", solrQuery.toString());
+        BoundStatement statement = searchVideos_getVideosWithSearchPrepared.bind().setString("solr_query", solrQuery.toString());
+        LOGGER.debug("Executed query is : " + statement.preparedStatement().getQueryString());
 
         statement.setFetchSize(request.getPageSize());
 
