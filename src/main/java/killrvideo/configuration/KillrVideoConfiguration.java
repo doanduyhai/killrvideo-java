@@ -35,7 +35,7 @@ public class KillrVideoConfiguration {
     @Value("${killrvideo.server.port: 8899}")
     private int applicationPort;
     
-    @Value("#{environment.KILLRVIDEO_HOST_IP}")
+    @Value("#{environment.KILLRVIDEO_HOST_IP ?: '10.0.75.1'}")
     private String applicationHost;
     
     @Value("${killrvideo.cassandra.mutation-error-log: /tmp/killrvideo-mutation-errors.log}")
