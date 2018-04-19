@@ -4,14 +4,15 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import javax.inject.Inject;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,9 +28,8 @@ import com.datastax.dse.graph.api.DseGraph;
 import com.evanlennick.retry4j.CallExecutor;
 import com.evanlennick.retry4j.config.RetryConfig;
 import com.evanlennick.retry4j.config.RetryConfigBuilder;
-import com.xqbase.etcd4j.EtcdClient;
-import com.xqbase.etcd4j.EtcdClientException;
 
+import killrvideo.dao.EtcdDao;
 import killrvideo.graph.KillrVideoTraversalSource;
 
 /**
@@ -57,29 +57,22 @@ public class DseConfiguration {
    
     @Value("#{environment.KILLRVIDEO_DSE_PASSWORD}")
     public Optional < String > dsePassword;
-    
-    @Value("#{environment.KILLRVIDEO_DOCKER_IP}")
-    public Optional < String > dockerIp;
-    
-    @Value("#{environment.KILLRVIDEO_HOST_IP}")
-    public Optional < String > serverIp;
-    
+   
     @Value("${killrvideo.cassandra.maxNumberOfTries: 10}")
-    private int maxNumberOfTries  = 10;
+    private int maxNumberOfTries;
     
     @Value("${killrvideo.cassandra.delayBetweenTries: 2}")
-    private int delayBetweenTries = 2;
-    
-    @Inject
-    private EtcdClient etcdClient;
+    private int delayBetweenTries;
+  
+    @Autowired
+    private EtcdDao etcdDao;
     
     @Bean
     public DseSession initializeDSE() {
          long top = System.currentTimeMillis();
-         LOGGER.info("Initializing connection to DSE Cluster...");
+         LOGGER.info("Initializing connection to DSE");
          Builder clusterConfig = new Builder();
-         // Use to test limit condition
-         // clusterConfig.addContactPointsWithPorts(asSocketInetAdress("localhost:9000").get());
+         clusterConfig.withClusterName(dseClusterName);
          populateContactPoints(clusterConfig);
          populateAuthentication(clusterConfig);
          populateGraphOptions(clusterConfig);
@@ -91,19 +84,17 @@ public class DseConfiguration {
          
          RetryConfig config = new RetryConfigBuilder()
                  .retryOnAnyException()
-                  //.retryOnSpecificExceptions(NoHostAvailableException.class)
                  .withMaxNumberOfTries(maxNumberOfTries)
                  .withDelayBetweenTries(delayBetweenTries, ChronoUnit.SECONDS)
                  .withFixedBackoff()
                  .build();
-         
          return new CallExecutor<DseSession>(config)
                  .afterFailedTry(s -> { 
                      LOGGER.info("Attempt #{}/{} failed.. trying in {} seconds.", atomicCount.getAndIncrement(),
                              maxNumberOfTries,  delayBetweenTries); })
                  .onFailure(s -> {
                      LOGGER.error("Cannot connection to DSE after {} attempts, exiting", maxNumberOfTries);
-                     System.err.println("Can not conenction to DSE after " + maxNumberOfTries + " attempts, exiting");
+                     System.err.println("Can not connect to DSE after " + maxNumberOfTries + " attempts, exiting now.");
                      System.exit(500);
                   })
                  .onSuccess(s -> {   
@@ -129,18 +120,17 @@ public class DseConfiguration {
      *      current configuration
      */
     private void populateContactPoints(Builder clusterConfig)  {
-        try {
-            etcdClient.listDir("/killrvideo/services/cassandra")
-                      .stream()
-                      .forEach(node -> asSocketInetAdress(node.value)
-                      .ifPresent(clusterConfig::addContactPointsWithPorts));
-            clusterConfig.withClusterName(dseClusterName);
-        } catch (EtcdClientException e) {
-            /**
-             * If ETCD is not setup yet we must retry.
-             */
-            throw new IllegalArgumentException("Cannot retrieve cassandra cluster information from ETCD", e);
-        }
+        LOGGER.info(" + Reading node addresses from ETCD.");
+        List<InetSocketAddress> clusterNodeAdresses = 
+                    etcdDao.read("/killrvideo/services/cassandra", true).stream()
+                    .map(this::asSocketInetAdress)
+                    .filter(node -> node.isPresent())
+                    .map(node -> node.get())
+                    .collect(Collectors.toList());            
+        clusterConfig.withPort(clusterNodeAdresses.get(0).getPort());
+        clusterNodeAdresses.stream()
+                           .map(adress -> adress.getHostName())
+                           .forEach(clusterConfig::addContactPoint);
     }
     
     /**

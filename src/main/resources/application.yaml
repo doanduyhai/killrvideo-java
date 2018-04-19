@@ -1,7 +1,9 @@
 spring:
-  main:
-    banner-mode: "off"
-        
+  output:
+    ansi:
+      enabled: ALWAYS
+      
+              
 # Support keys for our application
 
 # Custom 'killrvideo' keys App
@@ -27,10 +29,12 @@ killrvideo:
   etcd:
     host: 10.0.75.1
     port: 2379
+    maxNumberOfTries: 10
+    delayBetweenTries: 2
     
   cassandra:
     clustername: killrvideo
     mutation-error-log: /tmp/killrvideo-mutation-errors.log
-    maxNumberOfTries: 10
+    maxNumberOfTries: 50
     delayBetweenTries: 2
     
