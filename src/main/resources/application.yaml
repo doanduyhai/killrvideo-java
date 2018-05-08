@@ -29,12 +29,12 @@ killrvideo:
   etcd:
     host: 10.0.75.1
     port: 2379
-    maxNumberOfTries: 10
-    delayBetweenTries: 2
+    maxNumberOfTries: 30
+    delayBetweenTries: 5
     
   cassandra:
     clustername: killrvideo
     mutation-error-log: /tmp/killrvideo-mutation-errors.log
-    maxNumberOfTries: 50
+    maxNumberOfTries: 10
     delayBetweenTries: 2
     

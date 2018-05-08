@@ -27,7 +27,7 @@
     <!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
     <properties>
         
-        <dse.version>1.5.1</dse.version>
+        <dse.version>1.6.6</dse.version>
         
         <!--  GRPC/ Protobuf (Service Exposition) -->
         <grpc.version>1.10.0</grpc.version>
