@@ -1,5 +1,8 @@
 package killrvideo.configuration;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -23,9 +26,9 @@ import killrvideo.async.KillrVideoThreadFactory;
  */
 @Configuration
 public class KillrVideoConfiguration {
-   
+
     // --- Global Infos
-    
+
     @Value("${killrvideo.application.name:KillrVideo}")
     private String applicationName;
     
@@ -40,7 +43,16 @@ public class KillrVideoConfiguration {
     
     @Value("${killrvideo.cassandra.mutation-error-log: /tmp/killrvideo-mutation-errors.log}")
     private String mutationErrorLog;
-    
+
+    /**
+     * Create a set of sentence conjunctions and other "undesirable"
+     * words we will use later to exclude from search results.
+     * Had to use .split() below because of the following conversation:
+     * https://github.com/spring-projects/spring-boot/issues/501
+     */
+    @Value("#{'${killrvideo.search.ignoredWords}'.split(',')}")
+    private List<String> ignoredWords = new ArrayList<>();
+
     // --- ThreadPool Settings
    
     @Value("${killrvideo.threadpool.min.threads:5}")
@@ -54,7 +66,7 @@ public class KillrVideoConfiguration {
     
     @Value("${killrvideo.thread.queue.size:1000}")
     private int threadPoolQueueSize;
-    
+
     // --- Bean definition
     
     @Bean
@@ -119,6 +131,20 @@ public class KillrVideoConfiguration {
      */
     public String getMutationErrorLog() {
         return mutationErrorLog;
+    }
+
+    /**
+     * Getter for attribute 'ignoredWords'.
+     *
+     * @return
+     *       A HashSet of current value of 'ignoredWords'
+     */
+    public HashSet<String> getIgnoredWords() {
+        /**
+         * I use a HashSet here 1) to prevent any duplicates
+         * and 2) because I don't need to worry about ordering
+         */
+        return new HashSet<>(ignoredWords);
     }
 
     /**

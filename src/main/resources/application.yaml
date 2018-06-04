@@ -37,4 +37,6 @@ killrvideo:
     mutation-error-log: /tmp/killrvideo-mutation-errors.log
     maxNumberOfTries: 10
     delayBetweenTries: 2
-    
+
+  search:
+    ignoredWords: and,or,but,nor,so,for,yet,after,as,till,to,the,at,in,not,of,this,an,are,by,is,it,on,why,i,a,be,can,these,that,they,had,do

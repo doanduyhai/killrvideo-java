@@ -8,16 +8,16 @@ import static killrvideo.graph.__.uploaded;
 import static killrvideo.utils.ExceptionUtils.mergeStackTrace;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
+import killrvideo.configuration.KillrVideoConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -75,8 +75,20 @@ public class SuggestedVideosService extends SuggestedVideoServiceImplBase {
     @Inject
     KillrVideoInputValidator validator;
 
+    /** Load configuration from Yaml file and environments variables. */
+    @Inject
+    private KillrVideoConfiguration config;
+
     private String videosTableName;
     private PreparedStatement getRelatedVideos_getVideosPrepared;
+
+    /**
+     * Wrap search queries with "paging":"driver" to dynamically enable
+     * paging to ensure we pull back all available results in the application.
+     * https://docs.datastax.com/en/dse/6.0/cql/cql/cql_using/search_index/cursorsDeepPaging.html#cursorsDeepPaging__using-paging-with-cql-solr-queries-solrquery-Rim2GsbY
+     */
+    private String pagingDriverStart = "{\"q\":\"";
+    private String pagingDriverEnd = "\", \"paging\":\"driver\"}";
 
     @PostConstruct
     public void init(){
@@ -90,7 +102,7 @@ public class SuggestedVideosService extends SuggestedVideoServiceImplBase {
                 QueryBuilder
                         .select().all()
                         .from(Schema.KEYSPACE, videosTableName)
-                        .where(QueryBuilder.eq("solr_query", QueryBuilder.bindMarker()))
+                        .where(QueryBuilder.eq("solr_query", QueryBuilder.bindMarker())).limit(100)
         ).setConsistencyLevel(ConsistencyLevel.LOCAL_ONE);
     }
 
@@ -142,19 +154,38 @@ public class SuggestedVideosService extends SuggestedVideoServiceImplBase {
             final StringBuilder solrQuery = new StringBuilder();
 
             /**
-             * Use a Lucene based MoreLikeThis search with DSE Search
-             * !mlt = perform MoreLikeThis
-             * qf = More like this fields to consider
-             * mindf = MLT Minimum Document Frequency - the frequency at which words will be ignored which do not occur in at least this many docs
-             * mintf = MLT Minimum Term Frequency - the frequency below which terms will be ignored in the source doc
+             * Perform a query using DSE Search to find other videos that are similar
+             * to the "request" video using terms parsed from the name, tags,
+             * and description columns of the "request" video.
+             *
+             * The regex below will help us parse out individual words that we add to our
+             * set. The set will automatically handle any duplicates that we parse out.
+             * We can then use the end result termSet to query across the name, tags, and
+             * description columns to find similar videos.
              */
-            //:TODO Figure out what is going on with paging:driver returning strange results
+            final String space = " ";
+            final String eachWordRegEx = "[^\\w]";
+            final String eachWordPattern = Pattern.compile(eachWordRegEx).pattern();
+
+            final HashSet<String> termSet = new HashSet<>(50);
+            Collections.addAll(termSet, video.getName().toLowerCase().split(eachWordPattern));
+            Collections.addAll(video.getTags()); // getTags already returns a set
+            Collections.addAll(termSet, video.getDescription().toLowerCase().split(eachWordPattern));
+            termSet.removeAll(config.getIgnoredWords());
+            termSet.removeIf(String::isEmpty);
+
+            final String delimitedTermList = termSet.stream().map(Object::toString).collect(Collectors.joining(","));
+            LOGGER.debug("delimitedTermList is : " + delimitedTermList);
+
             solrQuery
-                    .append("{\"q\":\"{!mlt qf=\\\"name tags description\\\" mindf=2 mintf=2}")
-                    .append(video.getVideoid()).append("\", \"paging\":\"off\"}");
+                    //.append(pagingDriverStart)
+                    .append("name:").append(delimitedTermList).append(space)
+                    .append("tags:").append(delimitedTermList).append(space)
+                    .append("description:").append(delimitedTermList);
+                    //.append(pagingDriverEnd);
 
             LOGGER.debug("getRelatedVideos() solr_query is : " + solrQuery);
-            BoundStatement statement = getRelatedVideos_getVideosPrepared.bind()
+            final BoundStatement statement = getRelatedVideos_getVideosPrepared.bind()
                     .setString("solr_query", solrQuery.toString());
 
             statement
@@ -171,9 +202,10 @@ public class SuggestedVideosService extends SuggestedVideoServiceImplBase {
         relatedVideosFuture
                 .whenComplete((videos, ex) -> {
                     if (videos != null) {
+
                         int remaining = videos.getAvailableWithoutFetching();
                         for (Video video : videos) {
-                            SuggestedVideoPreview preview = video.toSuggestedVideoPreview();
+                            final SuggestedVideoPreview preview = video.toSuggestedVideoPreview();
 
                             if (!preview.getVideoId().equals(videoIdUuid)) {
                                 builder.addVideos(preview);
@@ -229,7 +261,7 @@ public class SuggestedVideosService extends SuggestedVideoServiceImplBase {
              * number of ratings to sample - the number of global user ratings to sample (smaller means faster traversal)
              * local user ratings to sample - the number of local user ratings to limit by
              */
-            KillrVideoTraversal traversal = killr.users(userIdString).recommendByUserRating(100, 4, 250, 10);
+            KillrVideoTraversal traversal = killr.users(userIdString).recommendByUserRating(5, 4, 1000, 5);
             GraphStatement gStatement = DseGraph.statementFromTraversal(traversal);
             LOGGER.debug("Recommend TRAVERSAL is: " + TypeConverter.bytecodeToTraversalString(traversal));
 
@@ -252,6 +284,7 @@ public class SuggestedVideosService extends SuggestedVideoServiceImplBase {
                                         .build()
                         );
                     }
+
                     // Add suggested videos...
                     builder.addAllVideos(result);
 
