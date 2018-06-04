@@ -13,12 +13,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.google.common.eventbus.EventBus;
-import com.xqbase.etcd4j.EtcdClient;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerServiceDefinition;
 import killrvideo.configuration.KillrVideoConfiguration;
+import killrvideo.dao.EtcdDao;
 import killrvideo.events.CassandraMutationErrorHandler;
 import killrvideo.service.CommentService;
 import killrvideo.service.RatingsService;
@@ -46,7 +46,7 @@ public class GrpcServer {
     
     /** Connectivity to ETCD Service discovery. */
     @Inject
-    private EtcdClient etcdClient;
+    private EtcdDao etcdDao;
     
     /** Communication channel between service, for now GUAVA inmemory messaging. */
     @Inject
@@ -165,7 +165,7 @@ public class GrpcServer {
             final String shortName  = shortenServiceName(service.getServiceDescriptor().getName());
             final String serviceKey = format("/killrvideo/services/%s/%s", shortName, applicationUID);
             LOGGER.info(" + [{}] : key={}", shortName, serviceKey);
-            etcdClient.set(serviceKey, applicationAdress);
+            etcdDao.register(serviceKey, applicationAdress);
         }
     }
     
